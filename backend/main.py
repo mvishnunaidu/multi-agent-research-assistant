@@ -18,7 +18,7 @@ app = FastAPI(
     description="""
 ## Multi-Agent Research & Document Assistant
 
-Agentic AI pipeline with four specialised LangGraph agents:
+Agentic AI pipeline built from scratch with four specialised agents:
 
 | Agent | Responsibility |
 |---|---|

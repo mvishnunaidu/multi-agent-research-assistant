@@ -4,11 +4,12 @@ app.py — Streamlit frontend for Multi-Agent Research Assistant.
 Start with:
     streamlit run frontend/app.py
 """
+import os
 import uuid
 import streamlit as st
 import requests
 
-API_BASE = "http://localhost:8000/api/v1"
+API_BASE = os.getenv("BACKEND_URL", "http://localhost:8000/api/v1")
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -21,37 +22,89 @@ st.set_page_config(
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
+/* App Background */
+.stApp {
+    background-color: #0e1117;
+}
+
+/* Sidebar Styling */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0d1117 0%, #161b27 100%);
+    background: linear-gradient(180deg, #0f131a 0%, #161b22 100%);
+    border-right: 1px solid rgba(255,255,255,0.05);
 }
+
+/* Gradient Title */
+h1 {
+    background: linear-gradient(90deg, #a5b4fc 0%, #6366f1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+/* Glassmorphism Agent Cards */
 .agent-card {
-    background: #1e2433;
-    border-left: 3px solid #6366f1;
-    border-radius: 6px;
-    padding: 10px 14px;
-    margin: 6px 0;
-    font-size: 0.87rem;
+    background: rgba(30, 36, 51, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-left: 4px solid #6366f1;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 8px 0;
+    font-size: 0.9rem;
     color: #e2e8f0;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
+
+.agent-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
+    border-left: 4px solid #818cf8;
+}
+
 .agent-name {
     font-weight: 700;
     color: #a5b4fc;
     text-transform: uppercase;
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    margin-bottom: 4px;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
+
+/* Source Badges */
 .source-badge {
-    display: inline-block;
-    background: #1f2937;
-    border: 1px solid #374151;
-    border-radius: 4px;
-    padding: 2px 8px;
-    font-size: 0.78rem;
-    color: #9ca3af;
-    margin: 2px 3px;
+    display: inline-flex;
+    align-items: center;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    color: #c7d2fe;
+    margin: 3px 4px;
+    transition: all 0.2s ease;
 }
+.source-badge:hover {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: rgba(99, 102, 241, 0.4);
+}
+
+/* Chat Input Styling */
+[data-testid="stChatInput"] {
+    background-color: #161b22 !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* Hide Streamlit Branding */
 #MainMenu, footer { visibility: hidden; }
+header { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
 

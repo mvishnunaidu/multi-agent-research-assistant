@@ -1,10 +1,17 @@
 """
 planner.py — Planner Agent
-Breaks the user query into 2-4 focused sub-tasks.
-Returns a plain Python dict — no framework magic.
+Breaks the user query into 2-4 focused sub-tasks using Structured Outputs.
 """
-import json
+from pydantic import BaseModel, Field
 from backend.core.llm import get_llm
+
+class Plan(BaseModel):
+    sub_tasks: list[str] = Field(
+        description="List of 2 to 4 focused, atomic sub-tasks to research."
+    )
+    reasoning: str = Field(
+        description="One sentence explaining the decomposition strategy."
+    )
 
 PLANNER_PROMPT = """You are a Research Planner. Break the user's query into 2 to 4 focused sub-tasks that together produce a comprehensive answer.
 
@@ -13,14 +20,7 @@ Documents uploaded: {has_docs}
 
 Rules:
 - If documents are uploaded, include sub-tasks that reference them explicitly.
-- Each sub-task must be atomic and independently answerable.
-- Output ONLY valid JSON. No markdown fences, no explanation outside JSON.
-
-Required output format:
-{{
-  "sub_tasks": ["sub-task 1", "sub-task 2", "sub-task 3"],
-  "reasoning": "One sentence explaining your decomposition strategy."
-}}"""
+- Each sub-task must be atomic and independently answerable."""
 
 
 def run_planner(query: str, has_documents: bool) -> dict:
@@ -30,26 +30,19 @@ def run_planner(query: str, has_documents: bool) -> dict:
     Output: {"sub_tasks": [...], "reasoning": "..."}
     """
     llm = get_llm()
+    structured_llm = llm.with_structured_output(Plan)
+    
     prompt = PLANNER_PROMPT.format(
         query=query,
         has_docs="Yes" if has_documents else "No",
     )
 
     try:
-        response = llm.invoke(prompt)
-        raw = response.content.strip()
-
-        # Strip markdown fences if LLM wraps response anyway
-        if "```" in raw:
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        raw = raw.strip()
-
-        parsed = json.loads(raw)
+        plan: Plan = structured_llm.invoke(prompt)
+        
         return {
-            "sub_tasks": parsed.get("sub_tasks", [query]),
-            "reasoning": parsed.get("reasoning", ""),
+            "sub_tasks": plan.sub_tasks if plan.sub_tasks else [query],
+            "reasoning": plan.reasoning,
             "error": None,
         }
 

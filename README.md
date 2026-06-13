@@ -1,16 +1,20 @@
 # 🔬 Multi-Agent Research Assistant
 
+[![CI](https://github.com/mvishnunaidu/multi-agent-research-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/mvishnunaidu/multi-agent-research-assistant/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A full-stack, deploy-ready **Generative AI** application that acts as an intelligent cognitive engine for your documents. It uses a dynamic Multi-Agent Architecture to read, analyze, and synthesize insights from PDFs, DOCX, and TXT files.
 
-Built with **React (Vite)**, **Python**, **FastAPI**, **LangChain**, **FAISS**, and **HuggingFace**, this application completely replaces basic prompting by orchestrating four specialized AI agents to autonomously fulfill complex research tasks.
+Built with **Streamlit**, **Python**, **FastAPI**, **LangChain**, **FAISS**, and **HuggingFace**, this application completely replaces basic prompting by orchestrating four specialized AI agents to autonomously fulfill complex research tasks.
 
 ---
 
-## Architecture Overview
+## 🏗️ Architecture Overview
 
 ```mermaid
 graph TD
-    UI[Vite React UI - Cyber/Neon Aesthetic] -->|REST API| API[FastAPI Backend]
+    UI[Streamlit UI] -->|REST API| API[FastAPI Backend]
     
     subgraph RAG Pipeline
         Upload[Document Upload] --> Split[Text Splitter]
@@ -39,10 +43,9 @@ graph TD
 
 ## 💻 Tech Stack
 
-### Frontend (Modern UI)
-* **Framework:** React + Vite
-* **Styling:** Highly custom Vanilla CSS (Glassmorphism, CSS Keyframe Animations, Cyber/Neon accents)
-* **Components:** Lucide React (Icons), React Markdown
+### Frontend
+* **Framework:** Streamlit
+* **Styling:** Custom CSS
 
 ### Backend (AI & API)
 * **API Framework:** FastAPI, Uvicorn, Pydantic
@@ -83,11 +86,9 @@ python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ### 3. Frontend Setup
 Open a second terminal:
 ```bash
-cd modern-frontend
-npm install
-npm run dev
+streamlit run frontend/app.py
 ```
-Navigate to `http://localhost:5173` in your browser.
+Navigate to `http://localhost:8501` in your browser.
 
 ---
 
