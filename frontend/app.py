@@ -22,84 +22,125 @@ st.set_page_config(
 # ── Custom CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* App Background */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+
+/* Global Font and Body */
+html, body, [class*="css"] {
+    font-family: 'Outfit', sans-serif !important;
+}
+
+/* Dynamic Animated Background */
+@keyframes gradientAnimation {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
 .stApp {
-    background-color: #0e1117;
+    background: linear-gradient(-45deg, #0a0a0f, #130f1c, #0f172a, #0a0a0f);
+    background-size: 400% 400%;
+    animation: gradientAnimation 15s ease infinite;
 }
 
-/* Sidebar Styling */
+/* Sidebar Styling with Deep Glassmorphism */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0f131a 0%, #161b22 100%);
-    border-right: 1px solid rgba(255,255,255,0.05);
+    background: rgba(17, 17, 26, 0.4) !important;
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Gradient Title */
+/* Radiant Animated Title */
 h1 {
-    background: linear-gradient(90deg, #a5b4fc 0%, #6366f1 100%);
+    background: linear-gradient(90deg, #00f2fe 0%, #4facfe 50%, #f093fb 100%);
+    background-size: 200% auto;
+    color: #fff;
+    background-clip: text;
+    text-fill-color: transparent;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    animation: shine 3s linear infinite;
     font-weight: 800;
-    letter-spacing: -0.5px;
+    letter-spacing: -1px;
 }
 
-/* Glassmorphism Agent Cards */
+@keyframes shine {
+    to {
+        background-position: 200% center;
+    }
+}
+
+/* Glassmorphism Agent Cards with Neon Hover */
 .agent-card {
-    background: rgba(30, 36, 51, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,0.05);
-    border-left: 4px solid #6366f1;
-    border-radius: 8px;
-    padding: 14px 16px;
-    margin: 8px 0;
-    font-size: 0.9rem;
+    background: rgba(22, 27, 34, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-left: 4px solid #4facfe;
+    border-radius: 12px;
+    padding: 16px;
+    margin: 12px 0;
+    font-size: 0.95rem;
     color: #e2e8f0;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
 }
 
 .agent-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
-    border-left: 4px solid #818cf8;
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 12px 40px 0 rgba(0, 242, 254, 0.15), 0 4px 10px 0 rgba(0, 0, 0, 0.2);
+    border-left: 4px solid #00f2fe;
+    border-color: rgba(0, 242, 254, 0.2);
 }
 
 .agent-name {
-    font-weight: 700;
-    color: #a5b4fc;
+    font-weight: 800;
+    color: #00f2fe;
     text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 0.08em;
-    margin-bottom: 6px;
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
 }
 
-/* Source Badges */
+/* Animated Source Badges */
 .source-badge {
     display: inline-flex;
     align-items: center;
-    background: rgba(99, 102, 241, 0.1);
-    border: 1px solid rgba(99, 102, 241, 0.2);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 0.8rem;
-    color: #c7d2fe;
-    margin: 3px 4px;
-    transition: all 0.2s ease;
-}
-.source-badge:hover {
-    background: rgba(99, 102, 241, 0.2);
-    border-color: rgba(99, 102, 241, 0.4);
+    background: rgba(0, 242, 254, 0.05);
+    border: 1px solid rgba(0, 242, 254, 0.2);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    color: #e2e8f0;
+    margin: 4px;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(0, 242, 254, 0);
 }
 
-/* Chat Input Styling */
+.source-badge:hover {
+    background: rgba(0, 242, 254, 0.15);
+    border-color: rgba(0, 242, 254, 0.6);
+    box-shadow: 0 0 15px rgba(0, 242, 254, 0.3);
+    transform: scale(1.05);
+    color: #fff;
+}
+
+/* Neon Chat Input */
 [data-testid="stChatInput"] {
-    background-color: #161b22 !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
-    border-radius: 12px !important;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    background-color: rgba(10, 10, 15, 0.8) !important;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.3);
+    transition: all 0.3s ease;
+}
+
+[data-testid="stChatInput"]:focus-within {
+    border-color: #00f2fe !important;
+    box-shadow: 0 0 20px rgba(0, 242, 254, 0.2), 0 8px 32px 0 rgba(0,0,0,0.3);
 }
 
 /* Hide Streamlit Branding */
