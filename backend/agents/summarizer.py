@@ -12,7 +12,7 @@ from backend.core.llm import get_llm
 
 logger = logging.getLogger(__name__)
 
-SUMMARIZER_PROMPT = """You are an expert Summarizer Agent. Synthesize the research findings below into a cohesive, structured summary addressing the original user research query.
+SUMMARIZER_PROMPT = """You are an expert Summarizer Agent. Synthesize the research findings below into a fast, cohesive, structured summary addressing the original user research query.
 
 Original Query: {query}
 
@@ -21,9 +21,9 @@ Research Findings:
 
 Strict Synthesis Guidelines:
 1. Grounding: Rely strictly on the findings provided above. Do NOT introduce external data, statistics, or unsupported claims.
-2. Structure: Group related insights logically with concise subheadings or bullet points where comparisons are helpful.
+2. Structure: Group related insights logically into a concise summary (~150 to 250 words) with focused bullet points.
 3. Specificity: Preserve exact numbers, dates, proper nouns, and citations from the findings.
-4. Completeness: Address each sub-task's key finding concisely without repetitive boilerplate.
+4. Completeness: Address each sub-task's key finding directly without repetitive boilerplate or preamble.
 5. Tone: Objective, technical, and executive-ready prose."""
 
 

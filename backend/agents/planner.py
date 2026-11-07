@@ -35,16 +35,16 @@ class Plan(BaseModel):
         return deduped[:4]
 
 
-PLANNER_PROMPT = """You are an expert Research Planner. Break the user's research query into 2 to 4 focused, atomic sub-tasks that together produce a comprehensive and balanced report.
+PLANNER_PROMPT = """You are an expert Research Planner. Break the user's research query into 2 or 3 focused, atomic sub-tasks that together produce a fast, comprehensive, and balanced report.
 
 User Query: {query}
 Session has uploaded documents: {has_docs}
 
 Rules:
-1. Generate between 2 and 4 sub-tasks (strictly no fewer than 2, no more than 4).
+1. Generate 2 or 3 sub-tasks (strictly between 2 and 3).
 2. Each sub-task must be concrete, atomic, and answerable independently.
 3. If documents are uploaded, formulate sub-tasks that reference the document context and data points.
-4. If no documents are uploaded, focus on key concepts, comparison, implications, and foundational knowledge.
+4. If no documents are uploaded, focus on core concepts, comparison, and evidence-dense foundational knowledge.
 5. Provide a succinct one-sentence rationale for your decomposition strategy."""
 
 

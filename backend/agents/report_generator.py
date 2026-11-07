@@ -32,20 +32,20 @@ You must format your response using EXACTLY these headings in this order:
 # Research Report
 
 ## Executive Summary
-(2 to 3 sentences delivering a direct, decisive answer to the user query)
+(2 to 3 concise, high-impact sentences delivering a direct, decisive answer)
 
 ## Findings
-(Expand the summary into logically structured subheadings, delivering depth, technical metrics, and evidence without repetitive filler)
+(Present key findings under 2 to 3 focused subheadings with concise bullet points, metrics, and evidence. Be dense and direct without verbose introductory filler)
 
 ## Key Takeaways
-(3 to 5 high-impact, actionable bullet points capturing the core insights)
+(3 to 4 high-impact, actionable bullet points capturing the core insights)
 
 ## Sources
 (List the exact source documents used, or write "General knowledge (no documents uploaded)" if no document sources were provided)
 
 Formatting & Grounding Rules:
 - Never invent citations, page numbers, author names, or statistics not present in the summary.
-- Maintain a polished, professional engineering tone.
+- Maintain a sharp, professional engineering tone.
 - Do NOT add intro or outro meta-commentary (e.g., "Here is your report")."""
 
 

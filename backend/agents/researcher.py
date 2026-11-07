@@ -25,18 +25,19 @@ Document Context Excerpts:
 
 Strict Grounding Rules:
 1. Base your answer solely on facts, metrics, and statements present in the context excerpts above.
-2. If the context does not contain enough information to address the sub-task, explicitly state: "The provided document excerpts do not contain sufficient information to answer this sub-task."
-3. Cite the source document filename (and page number if specified in the excerpt header) for each major fact.
-4. Do NOT speculate, hallucinate external references, or invent page numbers or statistics."""
+2. Deliver a concise, high-density answer in 1 to 2 paragraphs. Avoid conversational filler or introductory preamble.
+3. If the context does not contain enough information to address the sub-task, explicitly state: "The provided document excerpts do not contain sufficient information to answer this sub-task."
+4. Cite the source document filename (and page number if specified in the excerpt header) for each major fact.
+5. Do NOT speculate, hallucinate external references, or invent page numbers or statistics."""
 
 GENERAL_PROMPT = """You are an objective Research Agent. Answer the following question using your foundational knowledge.
 
 Question: {task}
 
 Rules:
-1. Provide a factual, balanced, and structured answer.
+1. Provide a concise, high-density, and structured answer in 1 to 2 paragraphs.
 2. Clearly distinguish established facts from general consensus or ongoing debates.
-3. Keep the response concise, informative, and free of filler phrases."""
+3. Keep the response direct, informative, and free of introductory filler phrases."""
 
 
 def run_researcher(

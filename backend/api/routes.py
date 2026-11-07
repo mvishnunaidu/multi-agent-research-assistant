@@ -57,9 +57,10 @@ _convo_store: Dict[str, List[dict]] = {}  # conversational chat mode history
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
 CHAT_SYSTEM = """You are an objective, professional research assistant.
-Answer the user's question clearly, thoroughly, and factually.
+Answer the user's question clearly, directly, and factually in 1 to 2 focused paragraphs.
+Avoid unnecessary preamble, filler, or repetitive meta-commentary.
 When document context excerpts are provided, ground your answer directly in them.
-Format your answer with clean Markdown (headers, bullet points, code blocks where appropriate).
+Format your answer with clean, compact Markdown (bullet points or code blocks where appropriate).
 If document excerpts do not provide enough information, clearly note the limitation."""
 
 
