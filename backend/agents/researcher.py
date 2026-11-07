@@ -9,6 +9,7 @@ Executes research for each Planner sub-task.
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any, Set
 from backend.core.llm import get_llm
 from backend.core.document_store import get_retriever, session_has_documents
@@ -96,10 +97,21 @@ def run_researcher(
             errors.append(f"Retriever initialization warning: {e}")
             has_docs = False  # Fall back to general knowledge if retriever fails
 
-    for task in sub_tasks:
-        clean_task = task.strip()
-        if not clean_task:
-            continue
+    valid_tasks = [(i, t.strip()) for i, t in enumerate(sub_tasks) if t.strip()]
+    if not valid_tasks:
+        return {
+            "answers": [],
+            "retrieved_chunks": [],
+            "source_files": [],
+            "grounding": "general_knowledge",
+            "status": "fallback",
+            "error": "No non-empty sub-tasks provided to Researcher.",
+        }
+
+    def process_single_subtask(task_idx: int, clean_task: str) -> Dict[str, Any]:
+        task_chunks = []
+        task_sources = set()
+        task_chunks_count = 0
 
         try:
             if has_docs and retriever is not None:
@@ -111,19 +123,18 @@ def run_researcher(
                     src = doc.metadata.get("source_file", "Uploaded Document")
                     page = doc.metadata.get("page")
                     page_str = f" (Page {page + 1})" if page is not None else ""
-                    source_files.add(src)
+                    task_sources.add(src)
 
                     header = f"[Excerpt {idx + 1} | Source: {src}{page_str}]"
                     chunk_text = f"{header}\n{doc.page_content.strip()}"
                     context_parts.append(chunk_text)
-                    retrieved_chunks.append(doc.page_content.strip())
+                    task_chunks.append(doc.page_content.strip())
 
                 if context_parts:
-                    total_chunks_found += len(context_parts)
+                    task_chunks_count = len(context_parts)
                     context_block = "\n\n---\n\n".join(context_parts)
                     prompt = RAG_PROMPT.format(task=clean_task, context=context_block)
                 else:
-                    context_block = "No matching excerpts found in the uploaded documents."
                     prompt = (
                         f"Sub-task: {clean_task}\n\n"
                         "Note: No relevant excerpts were found in the uploaded documents for this sub-task. "
@@ -132,22 +143,53 @@ def run_researcher(
 
                 response = llm.invoke(prompt)
                 content = response.content.strip() if hasattr(response, "content") else str(response)
-                answers.append(f"### Sub-task: {clean_task}\n\n{content}")
+                answer = f"### Sub-task: {clean_task}\n\n{content}"
 
             else:
                 # ── General knowledge LLM path ────────────────────────────────
                 prompt = GENERAL_PROMPT.format(task=clean_task)
                 response = llm.invoke(prompt)
                 content = response.content.strip() if hasattr(response, "content") else str(response)
-                answers.append(f"### Sub-task: {clean_task}\n\n{content}")
+                answer = f"### Sub-task: {clean_task}\n\n{content}"
+
+            return {
+                "idx": task_idx,
+                "answer": answer,
+                "chunks": task_chunks,
+                "sources": task_sources,
+                "chunks_count": task_chunks_count,
+                "error": None,
+            }
 
         except Exception as task_err:
             logger.error("Error executing researcher sub-task '%s': %s", clean_task, task_err)
-            errors.append(str(task_err))
-            answers.append(
-                f"### Sub-task: {clean_task}\n\n"
-                f"*Notice: Could not retrieve or generate findings for this sub-task due to an execution issue.*"
-            )
+            return {
+                "idx": task_idx,
+                "answer": (
+                    f"### Sub-task: {clean_task}\n\n"
+                    f"*Notice: Could not retrieve or generate findings for this sub-task due to an execution issue.*"
+                ),
+                "chunks": [],
+                "sources": set(),
+                "chunks_count": 0,
+                "error": str(task_err),
+            }
+
+    # Execute all independent sub-tasks concurrently to dramatically reduce latency
+    max_workers = min(len(valid_tasks), 4)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(process_single_subtask, idx, task) for idx, task in valid_tasks]
+        results = [f.result() for f in futures]
+
+    # Preserve deterministic task order
+    results.sort(key=lambda r: r["idx"])
+    for r in results:
+        answers.append(r["answer"])
+        retrieved_chunks.extend(r["chunks"])
+        source_files.update(r["sources"])
+        total_chunks_found += r["chunks_count"]
+        if r["error"]:
+            errors.append(r["error"])
 
     # Determine grounding and status
     if has_docs:

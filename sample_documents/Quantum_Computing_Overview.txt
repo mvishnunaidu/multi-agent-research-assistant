@@ -22,3 +22,4 @@ In the current Noisy Intermediate-Scale Quantum (NISQ) era, quantum processors l
 - Coherence Times: Environmental decoherence limits the depth of quantum circuits before quantum states degrade into noise.
 - Quantum Error Correction (QEC): Surface codes and LDPC (low-density parity check) codes require thousands of physical qubits to encode a single protected logical qubit.
 - Practical Applications: Near-term applications focus on quantum chemistry simulations, molecular docking for pharmaceutical discovery, and combinatorial portfolio optimization.
+

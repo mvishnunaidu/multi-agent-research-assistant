@@ -179,9 +179,11 @@ def ingest_file(file_path: Path, session_id: str) -> Dict[str, Any]:
         )
         existing_vs.add_documents(chunks)
         existing_vs.save_local(str(store_path))
+        _vectorstore_cache[valid_session] = existing_vs
     else:
         vs = FAISS.from_documents(chunks, _get_embeddings())
         vs.save_local(str(store_path))
+        _vectorstore_cache[valid_session] = vs
 
     # Update manifest
     manifest.append({
@@ -199,10 +201,14 @@ def ingest_file(file_path: Path, session_id: str) -> Dict[str, Any]:
     }
 
 
+_vectorstore_cache: Dict[str, Any] = {}
+
+
 def get_retriever(session_id: str, k: int = 5):
     """
     Return a similarity retriever for an existing session's FAISS vector store.
     Validates session isolation to ensure only authorized session directories are loaded.
+    Uses in-memory cache to eliminate disk I/O deserialization latency on repeat lookups.
     """
     valid_session = validate_session_id(session_id)
     store_path = settings.vectorstore_dir / valid_session
@@ -214,13 +220,18 @@ def get_retriever(session_id: str, k: int = 5):
             "Please upload a document first."
         )
 
-    from langchain_community.vectorstores import FAISS
+    if valid_session in _vectorstore_cache:
+        vs = _vectorstore_cache[valid_session]
+    else:
+        from langchain_community.vectorstores import FAISS
 
-    vs = FAISS.load_local(
-        str(store_path),
-        _get_embeddings(),
-        allow_dangerous_deserialization=True,
-    )
+        vs = FAISS.load_local(
+            str(store_path),
+            _get_embeddings(),
+            allow_dangerous_deserialization=True,
+        )
+        _vectorstore_cache[valid_session] = vs
+
     return vs.as_retriever(search_type="similarity", search_kwargs={"k": k})
 
 

@@ -34,3 +34,4 @@ To ensure high availability in production, the orchestrator should implement a m
 1. Multi-agent decomposition dramatically improves analytical accuracy over monolithic single-turn prompts.
 2. Deterministic sequential pipelines provide predictable latency, reliable audits, and debuggable telemetry.
 3. Offloading vector embeddings to cloud APIs allows full production RAG deployments to run smoothly within 200MB of RAM.
+
