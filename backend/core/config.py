@@ -2,9 +2,9 @@
 config.py — Centralised settings loaded from .env
 """
 
-from pydantic_settings import BaseSettings
-from pydantic import Field
 from pathlib import Path
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     upload_dir: Path = Field(default=Path("uploads"))
     vectorstore_dir: Path = Field(
         default=Path("vectorstores")
+    )
+
+    # Security & limits
+    max_upload_size_bytes: int = Field(
+        default=20 * 1024 * 1024,  # 20 MB max file size
+        description="Maximum allowed upload file size in bytes"
+    )
+    request_timeout_seconds: int = Field(
+        default=90,
+        description="Timeout for downstream pipeline operations"
     )
 
     # App metadata

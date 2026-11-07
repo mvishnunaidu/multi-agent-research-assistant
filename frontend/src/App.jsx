@@ -1,521 +1,925 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import {
-  Send, Upload, MessageSquare, FlaskConical,
-  History, Zap, FileText, ChevronDown, ChevronUp,
-  Paperclip, X, Cpu
+  Send,
+  Upload,
+  MessageSquare,
+  FlaskConical,
+  Clock,
+  Copy,
+  Check,
+  Download,
+  AlertCircle,
+  AlertTriangle,
+  Info,
+  CheckCircle2,
+  Cpu,
+  FileText,
+  FileCode,
+  FolderOpen
 } from 'lucide-react'
 import './index.css'
 
-// Robust response parsing: on free-tier hosts the backend can return an
-// empty body if it crashed mid-request or is still cold-starting, which
-// makes response.json() throw a cryptic "Unexpected end of JSON input".
-// This gives the user something actionable instead.
-async function safeJson(response) {
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+
+async function safeFetchJson(url, options = {}) {
+  const response = await fetch(url, options)
   const text = await response.text()
   if (!text) {
-    throw new Error(
-      response.ok
-        ? 'The server returned an empty response. It may still be starting up (free-tier hosts can take ~50s to wake) — please try again.'
-        : `Request failed (${response.status}). The server may be restarting — please try again in a moment.`
-    )
+    if (response.ok) return {}
+    throw new Error(`Server returned status ${response.status}. The server may be starting up.`)
   }
   try {
-    return JSON.parse(text)
-  } catch {
-    throw new Error(`Request failed (${response.status}). Please try again.`)
-  }
-}
-
-const API = import.meta.env.VITE_API_BASE_URL || '/api/v1'
-
-// ── Utilities ────────────────────────────────────────────────────────────────
-function fmt(bytes) {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
-}
-
-function ts() {
-  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function fileIcon(name) {
-  const ext = name?.split('.').pop()?.toLowerCase()
-  if (ext === 'pdf')  return '📄'
-  if (ext === 'docx' || ext === 'doc') return '📝'
-  if (ext === 'txt')  return '📃'
-  return '📎'
-}
-
-// ── Toast System ─────────────────────────────────────────────────────────────
-function useToast() {
-  const [toasts, setToasts] = useState([])
-  const add = useCallback((msg, type = 'info') => {
-    const id = Date.now()
-    setToasts(p => [...p, { id, msg, type }])
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000)
-  }, [])
-  return { toasts, add }
-}
-
-// ── Agent Steps Accordion ─────────────────────────────────────────────────────
-function AgentSteps({ steps }) {
-  const [open, setOpen] = useState(false)
-  if (!steps || steps.length === 0) return null
-  const icons = { Planner: '🗺️', Researcher: '🔍', Summarizer: '📋', 'Report Generator': '📊' }
-  return (
-    <div>
-      <button className="steps-toggle" onClick={() => setOpen(o => !o)}>
-        <Cpu size={12} />
-        {open ? 'Hide' : 'Show'} agent trace ({steps.length} steps)
-        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-      </button>
-      {open && (
-        <div className="steps-list">
-          {steps.map((s, i) => (
-            <div className="step-item" key={i}>
-              <span className="step-icon">{icons[s.agent] || '⚙️'}</span>
-              <div>
-                <div className="step-name">
-                  {s.agent}
-                  <span className={`step-status-${s.status === 'completed' ? 'ok' : 'err'}`}>
-                    {' '}{s.status === 'completed' ? '✓' : '✗'}
-                  </span>
-                </div>
-                {s.output_preview && <div className="step-preview">{s.output_preview}</div>}
-                {s.error && <div className="step-preview" style={{ color: 'var(--error)' }}>{s.error}</div>}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Message Bubble ────────────────────────────────────────────────────────────
-function Message({ msg }) {
-  const isUser = msg.role === 'user'
-  return (
-    <div className={`msg ${isUser ? 'user' : 'agent'}`}>
-      <div className="msg-avatar">
-        {isUser ? '👤' : '🤖'}
-      </div>
-      <div style={{ maxWidth: '72%', display: 'flex', flexDirection: 'column' }}>
-        <div className="msg-bubble">
-          {isUser
-            ? <span>{msg.content}</span>
-            : <ReactMarkdown>{msg.content}</ReactMarkdown>
-          }
-          {msg.sources && msg.sources.length > 0 && (
-            <div className="sources-row">
-              {msg.sources.map((s, i) => (
-                <span className="source-tag" key={i}>📎 {s}</span>
-              ))}
-            </div>
-          )}
-        </div>
-        {msg.steps && <AgentSteps steps={msg.steps} />}
-        <div className={`msg-meta ${isUser ? 'user' : ''}`}>{msg.time}</div>
-      </div>
-    </div>
-  )
-}
-
-// ── Typing Indicator ──────────────────────────────────────────────────────────
-function TypingIndicator() {
-  return (
-    <div className="msg agent">
-      <div className="msg-avatar">🤖</div>
-      <div className="msg-bubble">
-        <div className="typing">
-          <span /><span /><span />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Upload Panel ──────────────────────────────────────────────────────────────
-function UploadPanel({ sessionId, onUploaded, uploadedFiles }) {
-  const [dragging, setDragging] = useState(false)
-  const [loading, setLoading] = useState(null) // filename being uploaded
-  const [localFiles, setLocalFiles] = useState([]) // [{name, size, status, error}]
-  const inputRef = useRef()
-  const { toasts, add } = useToast()
-
-  const doUpload = async (file) => {
-    const entry = { name: file.name, size: file.size, status: 'loading' }
-    setLocalFiles(p => [...p, entry])
-    const fd = new FormData()
-    fd.append('file', file)
-    try {
-      const r = await fetch(`${API}/upload?session_id=${sessionId}`, { method: 'POST', body: fd })
-      const data = await safeJson(r)
-      if (!r.ok) throw new Error(data.detail || 'Upload failed')
-      setLocalFiles(p => p.map(f => f.name === file.name ? { ...f, status: 'ok', chunks: data.num_chunks } : f))
-      onUploaded(file.name)
-      add(`"${file.name}" ingested — ${data.num_chunks} chunks`, 'success')
-    } catch (e) {
-      setLocalFiles(p => p.map(f => f.name === file.name ? { ...f, status: 'error', error: e.message } : f))
-      add(`Upload failed: ${e.message}`, 'error')
+    const data = JSON.parse(text)
+    if (!response.ok) {
+      throw new Error(data.detail || `Request failed (${response.status})`)
     }
+    return data
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      throw new Error(`Invalid response from server (${response.status}).`, { cause: err })
+    }
+    throw err
   }
-
-  const handleFiles = (files) => {
-    for (const f of files) doUpload(f)
-  }
-
-  return (
-    <div className="upload-panel">
-      <div className="panel-header">
-        <h2>📂 Document Upload</h2>
-        <p>Upload PDF, DOCX, or TXT files. They'll be chunked, embedded, and added to your session's knowledge base.</p>
-      </div>
-
-      <div
-        className={`dropzone ${dragging ? 'drag-over' : ''}`}
-        onClick={() => inputRef.current?.click()}
-        onDragOver={e => { e.preventDefault(); setDragging(true) }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={e => { e.preventDefault(); setDragging(false); handleFiles([...e.dataTransfer.files]) }}
-      >
-        <input ref={inputRef} type="file" accept=".pdf,.docx,.doc,.txt" multiple onChange={e => handleFiles([...e.target.files])} />
-        <div className="dropzone-icon">📤</div>
-        <h3>Drop files here or click to browse</h3>
-        <p>Supported: PDF · DOCX · DOC · TXT</p>
-        <button className="upload-btn" onClick={e => { e.stopPropagation(); inputRef.current?.click() }}>
-          <Upload size={14} /> Choose Files
-        </button>
-      </div>
-
-      {(localFiles.length > 0 || uploadedFiles.length > 0) && (
-        <div>
-          <div className="panel-header" style={{ marginBottom: 12 }}>
-            <h2 style={{ fontSize: 14 }}>Session Documents</h2>
-          </div>
-          <div className="files-list">
-            {localFiles.map((f, i) => (
-              <div className="file-card" key={i}>
-                <span className="file-icon">{fileIcon(f.name)}</span>
-                <div className="file-info">
-                  <div className="file-name">{f.name}</div>
-                  <div className="file-meta">{fmt(f.size)}{f.chunks ? ` · ${f.chunks} chunks` : ''}{f.error ? ` · ${f.error}` : ''}</div>
-                </div>
-                <span className={`file-status ${f.status}`}>
-                  {f.status === 'ok' ? '✓ Ready' : f.status === 'loading' ? '⏳ Processing…' : '✗ Error'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Toast container */}
-      <div className="toast-container">
-        {toasts.map(t => <div key={t.id} className={`toast ${t.type}`}>{t.msg}</div>)}
-      </div>
-    </div>
-  )
 }
 
-// ── History Panel ─────────────────────────────────────────────────────────────
-function HistoryPanel({ history, onSelect }) {
-  if (history.length === 0) return (
-    <div className="history-panel">
-      <div className="panel-header"><h2>🕑 History</h2><p>No queries yet for this session.</p></div>
-    </div>
-  )
-  return (
-    <div className="history-panel">
-      <div className="panel-header"><h2>🕑 History</h2><p>{history.length} messages in this session.</p></div>
-      {history.filter(m => m.role === 'user').map((m, i) => (
-        <div className="history-item" key={i} onClick={() => onSelect(m.content)}>
-          <div className="history-query">{m.content}</div>
-          <div className="history-meta">{m.time} · {m.mode === 'research' ? '🔬 Research' : '💬 Chat'}</div>
-        </div>
-      ))}
-    </div>
-  )
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
-// ── Main App ──────────────────────────────────────────────────────────────────
+function formatDuration(seconds) {
+  if (typeof seconds !== 'number' || isNaN(seconds)) return '0.0s'
+  return `${seconds.toFixed(2)}s`
+}
+
 export default function App() {
-  const [view, setView]           = useState('chat')         // 'chat' | 'upload' | 'history'
-  const [mode, setMode]           = useState('chat')         // 'chat' | 'research'
-  const [messages, setMessages]   = useState([])
-  const [input, setInput]         = useState('')
-  const [loading, setLoading]     = useState(false)
+  const [navTab, setNavTab] = useState('research') // 'research' | 'documents' | 'history'
+  const [mode, setMode] = useState('research')     // 'research' | 'chat'
   const [sessionId, setSessionId] = useState(null)
-  const [uploadedFiles, setUploadedFiles] = useState([])
   const [apiOnline, setApiOnline] = useState(false)
-  const [llmProvider, setLlmProvider] = useState('…')
-  const [toasts, setToasts]       = useState([])
-  const bottomRef = useRef()
-  const textareaRef = useRef()
+  const [llmProvider, setLlmProvider] = useState('Checking...')
+  const [coldStartNotice, setColdStartNotice] = useState(false)
 
-  // ── Session init ────────────────────────────────────────────────
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch(`${API}/session/new`, { method: 'POST' })
-        const d = await safeJson(r)
-        setSessionId(d.session_id)
+  // Document management
+  const [documents, setDocuments] = useState([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef(null)
 
-        const h = await fetch(`${API}/health`)
-        const hd = await safeJson(h)
-        setApiOnline(hd.status === 'ok')
-        setLlmProvider(hd.llm_provider)
-      } catch {
-        setApiOnline(false)
-      }
-    })()
+  // Input & Execution
+  const [inputQuery, setInputQuery] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Research state
+  const [activeResearch, setActiveResearch] = useState(null)
+  const [copiedReport, setCopiedReport] = useState(false)
+  const [copiedSession, setCopiedSession] = useState(false)
+
+  // Conversational chat state
+  const [chatMessages, setChatMessages] = useState([])
+  const chatBottomRef = useRef(null)
+
+  // Session history
+  const [sessionHistory, setSessionHistory] = useState([])
+
+  // Toast system
+  const [toasts, setToasts] = useState([])
+  const addToast = useCallback((message, type = 'info') => {
+    const id = Date.now() + Math.random()
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, 4000)
   }, [])
 
-  // ── Auto-scroll ─────────────────────────────────────────────────
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, loading])
-
-  // ── Toast ───────────────────────────────────────────────────────
-  const addToast = (msg, type = 'info') => {
-    const id = Date.now()
-    setToasts(p => [...p, { id, msg, type }])
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4000)
-  }
-
-  // ── Send ─────────────────────────────────────────────────────────
-  const send = async (text) => {
-    const q = (text || input).trim()
-    if (!q || loading || !sessionId) return
-
-    const userMsg = { role: 'user', content: q, time: ts(), mode }
-    setMessages(p => [...p, userMsg])
-    setInput('')
-    setLoading(true)
-
+  // ── Session & Health Check ──────────────────────────────────────────────────
+  const initSession = useCallback(async () => {
     try {
-      const hasDocs = uploadedFiles.length > 0
-      let reply, sources = [], steps = []
+      const data = await safeFetchJson(`${API_BASE}/session/new`, { method: 'POST' })
+      if (data?.session_id) {
+        setSessionId(data.session_id)
+        return data.session_id
+      }
+      return null
+    } catch {
+      return null
+    }
+  }, [])
 
-      if (mode === 'research') {
-        const r = await fetch(`${API}/research`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, query: q, has_documents: hasDocs }),
+  const checkHealth = useCallback(async () => {
+    try {
+      const health = await safeFetchJson(`${API_BASE}/health`)
+      const isOk = health.status === 'ok'
+      setApiOnline(isOk)
+      setLlmProvider(health.llm_provider || 'Active')
+      setColdStartNotice(!isOk)
+      return isOk
+    } catch {
+      setApiOnline(false)
+      setLlmProvider('Offline / Initializing')
+      setColdStartNotice(true)
+      return false
+    }
+  }, [])
+
+  const loadDocuments = useCallback(async (sid) => {
+    if (!sid) return
+    try {
+      const data = await safeFetchJson(`${API_BASE}/documents/${sid}`)
+      setDocuments(data.documents || [])
+    } catch {
+      // In-memory sessions return empty documents before upload
+    }
+  }, [])
+
+  const loadHistory = useCallback(async (sid) => {
+    if (!sid) return
+    try {
+      const data = await safeFetchJson(`${API_BASE}/history/${sid}`)
+      setSessionHistory(data.messages || [])
+    } catch {
+      // Empty history
+    }
+  }, [])
+
+  // Auto-polling health and auto-recovery
+  useEffect(() => {
+    let isMounted = true
+
+    const runCheck = async () => {
+      const ok = await checkHealth()
+      if (ok && isMounted) {
+        setSessionId((currSid) => {
+          if (!currSid) {
+            initSession().then((newSid) => {
+              if (newSid && isMounted) {
+                loadDocuments(newSid)
+                loadHistory(newSid)
+              }
+            })
+          }
+          return currSid
         })
-        const d = await safeJson(r)
-        if (!r.ok) throw new Error(d.detail || 'Research failed')
-        reply   = d.final_report
-        sources = d.sources || []
-        steps   = d.agent_steps || []
-      } else {
-        const r = await fetch(`${API}/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, message: q, has_documents: hasDocs }),
-        })
-        const d = await safeJson(r)
-        if (!r.ok) throw new Error(d.detail || 'Chat failed')
-        reply   = d.reply
-        sources = d.sources || []
+      }
+    }
+
+    runCheck()
+    const timer = setInterval(runCheck, apiOnline ? 25000 : 6000)
+    return () => {
+      isMounted = false
+      clearInterval(timer)
+    }
+  }, [apiOnline, checkHealth, initSession, loadDocuments, loadHistory])
+
+  useEffect(() => {
+    if (chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [chatMessages, isLoading])
+
+  // ── File Upload Handler ─────────────────────────────────────────────────────
+  const handleFileUpload = async (files) => {
+    if (!files || files.length === 0 || !sessionId) return
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+
+      if (ext === '.doc') {
+        addToast(`"${file.name}" rejected: Legacy .doc format not supported. Please use .docx or .pdf.`, 'error')
+        continue
       }
 
-      setMessages(p => [...p, { role: 'agent', content: reply, sources, steps, time: ts(), mode }])
-    } catch (e) {
-      const em = e.message || 'Something went wrong'
-      setMessages(p => [...p, {
-        role: 'agent', content: `❌ **Error:** ${em}`, time: ts(), mode
-      }])
-      addToast(em, 'error')
-    } finally {
-      setLoading(false)
+      if (!['.pdf', '.docx', '.txt'].includes(ext)) {
+        addToast(`"${file.name}" rejected: Unsupported format. Allowed: .pdf, .docx, .txt`, 'error')
+        continue
+      }
+
+      if (file.size > 20 * 1024 * 1024) {
+        addToast(`"${file.name}" exceeds 20MB limit.`, 'error')
+        continue
+      }
+
+      setIsUploading(true)
+      const formData = new FormData()
+      formData.append('file', file)
+
+      try {
+        const res = await safeFetchJson(`${API_BASE}/upload?session_id=${sessionId}`, {
+          method: 'POST',
+          body: formData,
+        })
+        addToast(res.message, res.is_duplicate ? 'info' : 'success')
+        await loadDocuments(sessionId)
+      } catch (err) {
+        addToast(`Upload failed for "${file.name}": ${err.message}`, 'error')
+      } finally {
+        setIsUploading(false)
+      }
     }
   }
 
-  const handleKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+  // ── Dispatch Action (Research vs Chat) ──────────────────────────────────────
+  const handleSend = async (overrideText) => {
+    const text = (overrideText || inputQuery).trim()
+    if (!text || !sessionId || isLoading) return
+
+    setInputQuery('')
+    setIsLoading(true)
+
+    if (mode === 'research') {
+      setNavTab('research')
+      // Temporary optimistic running steps
+      setActiveResearch({
+        query: text,
+        plan: [],
+        plan_reasoning: '',
+        sources: [],
+        final_report: '',
+        agent_steps: [
+          { agent: 'Planner', status: 'running', output_preview: 'Decomposing query into 2 to 4 atomic sub-tasks...' },
+          { agent: 'Researcher', status: 'pending', output_preview: 'Waiting for decomposition...' },
+          { agent: 'Summarizer', status: 'pending', output_preview: 'Waiting for research findings...' },
+          { agent: 'Report Generator', status: 'pending', output_preview: 'Waiting for synthesized evidence...' },
+        ],
+        overall_status: 'running',
+      })
+
+      try {
+        const response = await safeFetchJson(`${API_BASE}/research`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            query: text,
+            has_documents: documents.length > 0,
+          }),
+        })
+
+        setActiveResearch({
+          query: response.query,
+          plan: response.plan || [],
+          plan_reasoning: response.plan_reasoning || '',
+          sources: response.sources || [],
+          final_report: response.final_report || '',
+          agent_steps: response.agent_steps || [],
+          overall_status: response.overall_status || 'completed',
+          timestamp: response.timestamp,
+        })
+        await loadHistory(sessionId)
+        addToast('Multi-agent research report generated.', 'success')
+      } catch (err) {
+        setActiveResearch(prev => ({
+          ...(prev || {}),
+          query: text,
+          final_report: `### Research Execution Notice\n\nThe pipeline encountered an issue:\n\n**Error:** ${err.message}`,
+          overall_status: 'error',
+          agent_steps: [
+            { agent: 'Planner', status: 'error', output_preview: 'Pipeline halted.', error: err.message },
+            { agent: 'Researcher', status: 'skipped', output_preview: 'Skipped.' },
+            { agent: 'Summarizer', status: 'skipped', output_preview: 'Skipped.' },
+            { agent: 'Report Generator', status: 'skipped', output_preview: 'Skipped.' },
+          ],
+        }))
+        addToast(`Research failed: ${err.message}`, 'error')
+      } finally {
+        setIsLoading(false)
+      }
+    } else {
+      // Conversational Chat Mode
+      setNavTab('chat')
+      const userMsg = { role: 'user', content: text, timestamp: new Date().toLocaleTimeString() }
+      setChatMessages(prev => [...prev, userMsg])
+
+      try {
+        const chatRes = await safeFetchJson(`${API_BASE}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            message: text,
+            has_documents: documents.length > 0,
+          }),
+        })
+        const botMsg = {
+          role: 'assistant',
+          content: chatRes.reply,
+          sources: chatRes.sources || [],
+          timestamp: new Date().toLocaleTimeString(),
+        }
+        setChatMessages(prev => [...prev, botMsg])
+      } catch (err) {
+        setChatMessages(prev => [
+          ...prev,
+          { role: 'assistant', content: `**Error:** ${err.message}`, sources: [], timestamp: new Date().toLocaleTimeString() },
+        ])
+        addToast(`Chat failed: ${err.message}`, 'error')
+      } finally {
+        setIsLoading(false)
+      }
+    }
   }
 
-  const handleChip = (text) => { setInput(text); textareaRef.current?.focus() }
+  // ── Utilities ───────────────────────────────────────────────────────────────
+  const copyReport = () => {
+    if (!activeResearch?.final_report) return
+    navigator.clipboard.writeText(activeResearch.final_report)
+    setCopiedReport(true)
+    setTimeout(() => setCopiedReport(false), 2000)
+    addToast('Report copied to clipboard.', 'success')
+  }
 
-  const suggestions = [
+  const downloadMarkdown = () => {
+    if (!activeResearch?.final_report) return
+    const blob = new Blob([activeResearch.final_report], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Research_Report_${Date.now()}.md`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    addToast('Markdown file downloaded.', 'info')
+  }
+
+  const copySession = () => {
+    if (!sessionId) return
+    navigator.clipboard.writeText(sessionId)
+    setCopiedSession(true)
+    setTimeout(() => setCopiedSession(false), 2000)
+    addToast('Session UUID copied.', 'info')
+  }
+
+  const resetAll = () => {
+    setInputQuery('')
+    setActiveResearch(null)
+    setChatMessages([])
+    setNavTab(mode === 'research' ? 'research' : 'chat')
+  }
+
+  const samplePrompts = [
     'Explain quantum entanglement',
     'Summarize the uploaded document',
     'What are the key findings?',
     'Compare and contrast the main topics',
   ]
 
-  // ── Sidebar nav ──────────────────────────────────────────────────
-  const navItems = [
-    { id: 'chat',    icon: <MessageSquare size={15} />, label: 'Chat' },
-    { id: 'upload',  icon: <Upload size={15} />,        label: 'Documents', badge: uploadedFiles.length > 0 ? uploadedFiles.length : null },
-    { id: 'history', icon: <History size={15} />,       label: 'History' },
-  ]
+  const agentDescriptions = {
+    Planner: 'Decomposes query into 2 to 4 atomic sub-tasks with Pydantic structured output.',
+    Researcher: 'Top-5 FAISS similarity retrieval per sub-task or foundational knowledge reasoning.',
+    Summarizer: 'Synthesizes findings, preserving exact numbers, metrics, and citations.',
+    'Report Generator': 'Assembles formal 5-section Markdown report with source attribution.',
+  }
 
   return (
     <>
+      {/* ── Sidebar (Matching Screenshot 1) ────────────────────────────────── */}
       <aside className="sidebar">
-        <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">🤖</div>
+        <div className="sidebar-brand">
+          <div className="brand-icon-box">
+            <Cpu size={22} />
+          </div>
           <div>
-            <div className="sidebar-logo-text">Research Assistant</div>
-            <div className="sidebar-logo-sub">Multi-Agent AI Pipeline</div>
+            <div className="brand-title">Research Assistant</div>
+            <div className="brand-subtitle">MULTI-AGENT AI PIPELINE</div>
           </div>
         </div>
 
-        <div className="sidebar-section">Navigation</div>
-        {navItems.map(n => (
+        <button className="new-action-btn" onClick={resetAll}>
+          + New Research
+        </button>
+
+        <div className="sidebar-nav">
+          <div className="nav-section-title">NAVIGATION</div>
           <button
-            key={n.id}
-            className={`sidebar-btn ${view === n.id ? 'active' : ''}`}
-            onClick={() => setView(n.id)}
-            id={`nav-${n.id}`}
+            className={`nav-item ${navTab === 'research' || navTab === 'chat' ? 'active' : ''}`}
+            onClick={() => setNavTab(mode === 'research' ? 'research' : 'chat')}
           >
-            {n.icon}
-            {n.label}
-            {n.badge && <span className="mode-badge">{n.badge}</span>}
+            {mode === 'research' ? <FlaskConical size={16} /> : <MessageSquare size={16} />}
+            <span>{mode === 'research' ? 'Research' : 'Chat'}</span>
           </button>
-        ))}
 
-        <div className="sidebar-spacer" />
+          <button
+            className={`nav-item ${navTab === 'documents' ? 'active' : ''}`}
+            onClick={() => setNavTab('documents')}
+          >
+            <Upload size={16} />
+            <span>Documents</span>
+            {documents.length > 0 && <span className="nav-badge">{documents.length}</span>}
+          </button>
 
-        <div className="sidebar-section">Status</div>
-        <div className="sidebar-btn" style={{ cursor: 'default' }}>
-          <span className={`status-dot ${apiOnline ? '' : 'offline'}`} />
-          {apiOnline ? 'API Online' : 'API Offline'}
+          <button
+            className={`nav-item ${navTab === 'history' ? 'active' : ''}`}
+            onClick={() => setNavTab('history')}
+          >
+            <Clock size={16} />
+            <span>History</span>
+          </button>
         </div>
 
-        {uploadedFiles.length > 0 && (
-          <div className="sidebar-btn" style={{ cursor: 'default' }}>
-            <FileText size={15} />
-            {uploadedFiles.length} doc{uploadedFiles.length > 1 ? 's' : ''} loaded
+        <div className="sidebar-footer">
+          <div className="nav-section-title" style={{ padding: 0 }}>STATUS</div>
+          <div className="status-badge-row">
+            <span className={`status-indicator ${apiOnline ? '' : 'offline'}`} />
+            <span>{apiOnline ? 'API Online' : 'API Offline'}</span>
+            {!apiOnline && (
+              <button
+                className="copy-mini-btn"
+                style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 10, background: 'rgba(255,255,255,0.06)' }}
+                onClick={() => {
+                  checkHealth().then(ok => {
+                    if (ok && !sessionId) initSession()
+                  })
+                }}
+                title="Retry connection"
+              >
+                Retry
+              </button>
+            )}
           </div>
-        )}
+
+          <div className="session-info-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 10, letterSpacing: '0.05em' }}>SESSION ID</span>
+              <button className="copy-mini-btn" onClick={copySession} title="Copy Session ID">
+                {copiedSession ? <Check size={11} color="#00e682" /> : <Copy size={11} />}
+              </button>
+            </div>
+            <div className="session-id-display">
+              {sessionId ? `${sessionId.slice(0, 18)}...` : 'Initializing...'}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-cyan)', marginTop: 2 }}>
+              Provider: {llmProvider}
+            </div>
+          </div>
+        </div>
       </aside>
 
-      <div className="main">
-        {/* Top bar */}
-        <header className="topbar">
-          <span className={`status-dot ${apiOnline ? '' : 'offline'}`} />
-          <div>
-            <div className="topbar-title">
-              {view === 'chat'    && (mode === 'research' ? '🔬 Research Mode' : '💬 Chat Mode')}
-              {view === 'upload'  && '📂 Document Manager'}
-              {view === 'history' && '🕑 Session History'}
+      {/* ── Main Area ──────────────────────────────────────────────────────── */}
+      <div className="main-content">
+        {/* Top Header */}
+        <header className="top-header">
+          <div className="header-left">
+            <span className={`status-indicator ${apiOnline ? '' : 'offline'}`} />
+            <div className="workspace-title">
+              {navTab === 'research' && '🔬 Research Mode'}
+              {navTab === 'chat' && '💬 Chat Mode'}
+              {navTab === 'documents' && '📂 Document Manager'}
+              {navTab === 'history' && '🕑 Session History'}
             </div>
-            <div className="topbar-sub">
-              {sessionId ? `Session: ${sessionId.slice(0, 8)}…` : 'Initializing…'}
-            </div>
+            <span className="workspace-badge">
+              {sessionId ? `Session: ${sessionId.slice(0, 8)}...` : 'Connecting...'}
+            </span>
           </div>
-          <div className="topbar-right">
-            {uploadedFiles.length > 0 && (
-              <div className="topbar-pill">
-                <FileText size={12} />
-                {uploadedFiles.length} document{uploadedFiles.length > 1 ? 's' : ''}
+
+          <div className="header-right">
+            {documents.length > 0 && (
+              <div className="header-pill">
+                <FileCode size={13} />
+                <span>{documents.length} document{documents.length > 1 ? 's' : ''} in context</span>
               </div>
             )}
-
           </div>
         </header>
 
-        {/* Views */}
-        {view === 'upload' && (
-          <UploadPanel
-            sessionId={sessionId}
-            uploadedFiles={uploadedFiles}
-            onUploaded={name => setUploadedFiles(p => p.includes(name) ? p : [...p, name])}
-          />
+        {/* Cold-start banner */}
+        {coldStartNotice && (
+          <div className="cold-start-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={14} />
+              <span>Connecting to backend... On Render free tier, server instances spin down after inactivity and take 30–50s to wake up.</span>
+            </div>
+            <button
+              className="copy-mini-btn"
+              style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 10px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              onClick={() => {
+                checkHealth().then(ok => {
+                  if (ok && !sessionId) initSession()
+                })
+              }}
+            >
+              Retry Connection
+            </button>
+          </div>
         )}
 
-        {view === 'history' && (
-          <HistoryPanel
-            history={messages}
-            onSelect={q => { setView('chat'); handleChip(q) }}
-          />
-        )}
-
-        {view === 'chat' && (
-          <div className="chat-view">
-            <div className="messages-area">
-              {messages.length === 0 ? (
-                <div className="welcome-hero">
-                  <div className="welcome-icon">🤖</div>
+        {/* ── Scrollable Workspace Body ────────────────────────────────────── */}
+        <div className="workspace-body">
+          {/* TAB 1: RESEARCH MODE */}
+          {navTab === 'research' && (
+            <>
+              {/* If no research executed yet, show the iconic Hero Card from Screenshot 1 */}
+              {!activeResearch && (
+                <div className="welcome-hero-card">
+                  <div className="hero-avatar-glow">
+                    <Cpu size={40} />
+                  </div>
                   <h1>Multi-Agent Research Assistant</h1>
                   <p>
-                    Upload documents and ask questions — or just chat. Switch to
-                    <strong> Research Mode</strong> to run the full 4-agent pipeline:
+                    Upload documents and ask questions — or just chat. Switch to{' '}
+                    <strong>Research Mode</strong> to run the full 4-agent pipeline:{' '}
                     Planner → Researcher → Summarizer → Report Generator.
                   </p>
-                  <div className="welcome-chips">
-                    {suggestions.map((s, i) => (
-                      <button className="chip" key={i} onClick={() => handleChip(s)}>{s}</button>
+
+                  <div className="prompt-chips-grid">
+                    {samplePrompts.map((p, idx) => (
+                      <button
+                        key={idx}
+                        className="chip-btn"
+                        onClick={() => handleSend(p)}
+                        disabled={isLoading}
+                      >
+                        {p}
+                      </button>
                     ))}
                   </div>
                 </div>
-              ) : (
-                messages.map((m, i) => <Message msg={m} key={i} />)
               )}
-              {loading && <TypingIndicator />}
-              <div ref={bottomRef} />
-            </div>
 
-            {/* Input */}
-            <div className="input-area">
-              <div className="input-row">
-                <button
-                  id="mode-toggle-btn"
-                  className={`mode-toggle ${mode === 'research' ? 'research' : ''}`}
-                  onClick={() => setMode(m => m === 'chat' ? 'research' : 'chat')}
-                  title="Toggle between Chat and Research mode"
-                >
-                  {mode === 'research' ? <FlaskConical size={13} /> : <MessageSquare size={13} />}
-                  {mode === 'research' ? 'Research' : 'Chat'}
-                </button>
+              {/* Four-Agent Pipeline Trace Card */}
+              {activeResearch && (
+                <div className="agent-pipeline-card">
+                  <div className="pipeline-header">
+                    <h3>
+                      <Cpu size={16} color="var(--cyan-primary)" />
+                      Four-Agent Sequential Pipeline Trace
+                    </h3>
+                    <span className={`overall-status-pill ${activeResearch.overall_status}`}>
+                      Overall: {activeResearch.overall_status}
+                    </span>
+                  </div>
 
-                <div className="input-wrap">
-                  <textarea
-                    ref={textareaRef}
-                    id="chat-input"
-                    className="input-textarea"
-                    placeholder={mode === 'research'
-                      ? 'Enter your research question — the 4-agent pipeline will run…'
-                      : 'Ask anything, or upload docs to chat with them…'}
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={handleKey}
-                    rows={1}
-                    disabled={loading || !sessionId}
-                  />
-                  <div className="input-actions">
-                    {uploadedFiles.length > 0 && (
-                      <span style={{ fontSize: 11, color: 'var(--success)', display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <Paperclip size={11} /> {uploadedFiles.length} doc{uploadedFiles.length > 1 ? 's' : ''} in context
-                      </span>
-                    )}
-                    <span className="input-hint">Enter to send · Shift+Enter for new line</span>
+                  <div className="pipeline-grid">
+                    {['Planner', 'Researcher', 'Summarizer', 'Report Generator'].map((agentName, idx) => {
+                      const stepData = activeResearch.agent_steps?.find(s => s.agent === agentName) || {
+                        status: isLoading ? 'pending' : 'skipped',
+                        output_preview: 'Awaiting execution...',
+                      }
+
+                      return (
+                        <div className="agent-col" key={agentName}>
+                          <div className="agent-col-top">
+                            <span className="agent-step-number">STAGE 0{idx + 1}</span>
+                            {stepData.duration_seconds !== undefined && stepData.duration_seconds > 0 && (
+                              <span className="agent-duration">{formatDuration(stepData.duration_seconds)}</span>
+                            )}
+                          </div>
+
+                          <div className="agent-name-title">
+                            {agentName}
+                          </div>
+
+                          <div className="agent-role-desc">
+                            {agentDescriptions[agentName]}
+                          </div>
+
+                          <span className={`agent-status-badge ${stepData.status}`}>
+                            {stepData.status === 'completed' && <CheckCircle2 size={11} />}
+                            {stepData.status === 'fallback' && <AlertTriangle size={11} />}
+                            {stepData.status === 'error' && <AlertCircle size={11} />}
+                            {stepData.status === 'running' && <div className="spinner-sm" style={{ width: 10, height: 10 }} />}
+                            {stepData.status}
+                          </span>
+
+                          <div className="agent-preview-box">
+                            {stepData.output_preview || 'Telemetry preview appears upon step completion.'}
+                          </div>
+
+                          {stepData.error && (
+                            <div className="agent-warning-box">
+                              {stepData.error}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
+              )}
 
+              {/* Report Viewer */}
+              {activeResearch?.final_report && (
+                <div className="report-result-card">
+                  <div className="report-header-toolbar">
+                    <div className="report-title-area">
+                      <h3>Synthesized Research Report</h3>
+                    </div>
+
+                    <div className="report-actions">
+                      <button
+                        className={`toolbar-btn ${copiedReport ? 'copied' : ''}`}
+                        onClick={copyReport}
+                      >
+                        {copiedReport ? <Check size={13} /> : <Copy size={13} />}
+                        {copiedReport ? 'Copied' : 'Copy Markdown'}
+                      </button>
+
+                      <button className="toolbar-btn" onClick={downloadMarkdown}>
+                        <Download size={13} /> Download .md
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="report-meta-section">
+                    {activeResearch.plan && activeResearch.plan.length > 0 && (
+                      <div className="meta-row">
+                        <span className="meta-label">Sub-Tasks:</span>
+                        <div className="subtasks-pills-row">
+                          {activeResearch.plan.map((t, idx) => (
+                            <span className="subtask-tag" key={idx}>
+                              {idx + 1}. {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="meta-row">
+                      <span className="meta-label">Sources:</span>
+                      <div className="sources-pills-row">
+                        {activeResearch.sources && activeResearch.sources.length > 0 ? (
+                          activeResearch.sources.map((s, idx) => (
+                            <span className="source-badge" key={idx}>
+                              <FileText size={11} /> {s}
+                            </span>
+                          ))
+                        ) : (
+                          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                            General foundational knowledge (no document citations)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="report-markdown-body">
+                    <ReactMarkdown>{activeResearch.final_report}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* TAB 2: CHAT MODE */}
+          {navTab === 'chat' && (
+            <div className="chat-messages-container">
+              {chatMessages.length === 0 ? (
+                <div className="welcome-hero-card" style={{ margin: '30px auto' }}>
+                  <div className="hero-avatar-glow">
+                    <MessageSquare size={38} />
+                  </div>
+                  <h1>Conversational Chat Mode</h1>
+                  <p>
+                    Ask questions directly with conversational memory. If documents are uploaded, relevant excerpts will be retrieved into context automatically.
+                  </p>
+                </div>
+              ) : (
+                chatMessages.map((msg, idx) => (
+                  <div key={idx} className={`chat-bubble ${msg.role}`}>
+                    <div className="chat-avatar">
+                      {msg.role === 'user' ? 'U' : 'AI'}
+                    </div>
+                    <div className="chat-card">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      {msg.sources && msg.sources.length > 0 && (
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: 6 }}>
+                          {msg.sources.map((s, sidx) => (
+                            <span key={sidx} className="source-badge">
+                              <FileText size={10} /> {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+              {isLoading && (
+                <div className="chat-bubble assistant">
+                  <div className="chat-avatar">AI</div>
+                  <div className="chat-card" style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
+                    <div className="spinner-sm" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'var(--cyan-primary)' }} />
+                    Generating response...
+                  </div>
+                </div>
+              )}
+              <div ref={chatBottomRef} />
+            </div>
+          )}
+
+          {/* TAB 3: DOCUMENTS WORKSPACE (Matching Screenshot 2) */}
+          {navTab === 'documents' && (
+            <div className="documents-panel">
+              <div className="docs-panel-header">
+                <h2>📂 Document Upload</h2>
+                <p>Upload PDF, DOCX, or TXT files. They&apos;ll be chunked, embedded, and added to your session&apos;s knowledge base.</p>
+              </div>
+
+              <div
+                className={`dropzone-box ${isDragging ? 'drag-over' : ''}`}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setIsDragging(true)
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setIsDragging(false)
+                  if (e.dataTransfer.files) {
+                    handleFileUpload(e.dataTransfer.files)
+                  }
+                }}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".pdf,.docx,.txt"
+                  multiple
+                  onChange={(e) => {
+                    if (e.target.files) handleFileUpload(e.target.files)
+                  }}
+                />
+                <div className="dropzone-icon-wrap">
+                  <Upload size={28} />
+                </div>
+                <h3>Drop files here or click to browse</h3>
+                <p>Supported: PDF · DOCX · TXT · Max 20MB</p>
                 <button
-                  id="send-btn"
-                  className="send-btn"
-                  onClick={() => send()}
-                  disabled={loading || !input.trim() || !sessionId}
-                  aria-label="Send message"
+                  className="cyan-glow-btn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    fileInputRef.current?.click()
+                  }}
+                  disabled={isUploading}
                 >
-                  {loading ? <div className="spinner" /> : <Send size={18} color="white" />}
+                  <FolderOpen size={16} />
+                  {isUploading ? 'Ingesting into FAISS...' : 'Choose Files'}
                 </button>
               </div>
+
+              <div className="docs-list-card">
+                <div className="docs-list-header">
+                  <h3>Session Documents in Vector Index</h3>
+                  <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                    {documents.length} document{documents.length === 1 ? '' : 's'} indexed
+                  </span>
+                </div>
+
+                {documents.length === 0 ? (
+                  <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 13.5 }}>
+                    No documents ingested for this session yet. Upload files above to build your FAISS knowledge base.
+                  </div>
+                ) : (
+                  <table className="docs-table">
+                    <thead>
+                      <tr>
+                        <th>Document Name</th>
+                        <th>Chunks in FAISS</th>
+                        <th>File Size</th>
+                        <th>Ingested At</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {documents.map((doc, idx) => (
+                        <tr key={idx}>
+                          <td className="doc-name-cell">
+                            <FileText size={16} color="var(--cyan-primary)" />
+                            {doc.filename}
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)' }}>{doc.num_chunks} chunks</td>
+                          <td style={{ fontFamily: 'var(--font-mono)' }}>{formatBytes(doc.file_size_bytes)}</td>
+                          <td style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                            {doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleTimeString() : 'Recent'}
+                          </td>
+                          <td>
+                            <span className="agent-status-badge completed">
+                              <CheckCircle2 size={11} /> Ready
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
+          )}
+
+          {/* TAB 4: SESSION HISTORY */}
+          {navTab === 'history' && (
+            <div className="history-list-card">
+              <div className="docs-list-header">
+                <h3>Session Query History</h3>
+                <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                  {sessionHistory.length} query record{sessionHistory.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              {sessionHistory.length === 0 ? (
+                <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: 13.5 }}>
+                  No queries in this session yet. All research runs and conversational turns will be audited here.
+                </div>
+              ) : (
+                sessionHistory.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="history-item-row"
+                    onClick={() => {
+                      if (item.query) {
+                        setInputQuery(item.query)
+                        setNavTab('research')
+                      }
+                    }}
+                  >
+                    <div className="history-item-left">
+                      <div className="history-query-text">{item.query || item.content}</div>
+                      <div className="history-time-meta">
+                        {item.role?.toUpperCase()} · {item.timestamp ? new Date(item.timestamp).toLocaleTimeString() : 'Recent'}
+                        {item.overall_status && ` · Status: ${item.overall_status}`}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 12, color: 'var(--cyan-primary)', fontFamily: 'var(--font-mono)' }}>
+                      Re-run →
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Floating Input Dock (Matching Screenshot 1) ──────────────────── */}
+        <div className="floating-input-dock">
+          <div className="dock-inner">
+            <button
+              className={`mode-toggle-btn ${mode === 'research' ? 'research' : ''}`}
+              onClick={() => {
+                const nextMode = mode === 'research' ? 'chat' : 'research'
+                setMode(nextMode)
+                setNavTab(nextMode)
+              }}
+              title="Click to toggle between 4-Agent Research and Direct Chat"
+            >
+              {mode === 'research' ? <FlaskConical size={14} /> : <MessageSquare size={14} />}
+              <span>{mode === 'research' ? 'Research' : 'Chat'}</span>
+            </button>
+
+            <textarea
+              className="dock-textarea"
+              placeholder={
+                mode === 'research'
+                  ? 'Enter research question — the 4-agent pipeline will run...'
+                  : 'Ask anything, or upload docs to chat with them...'
+              }
+              value={inputQuery}
+              onChange={(e) => setInputQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSend()
+                }
+              }}
+              rows={1}
+              disabled={isLoading}
+            />
+
+            <span className="dock-hint">
+              Enter to send · Shift+Enter for new line
+            </span>
+
+            <button
+              className="dock-send-btn"
+              onClick={() => handleSend()}
+              disabled={isLoading || !inputQuery.trim()}
+              aria-label="Send message"
+            >
+              {isLoading ? (
+                <div className="spinner-sm" />
+              ) : (
+                <Send size={18} />
+              )}
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Global Toasts */}
-      <div className="toast-container">
-        {toasts.map(t => <div key={t.id} className={`toast ${t.type}`}>{t.msg}</div>)}
+      {/* ── Toast Notifications Stack ──────────────────────────────────────── */}
+      <div className="toast-stack">
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast-item ${t.type}`}>
+            {t.type === 'success' && <CheckCircle2 size={15} color="var(--status-ok)" />}
+            {t.type === 'error' && <AlertCircle size={15} color="var(--status-err)" />}
+            {t.type === 'info' && <Info size={15} color="var(--cyan-primary)" />}
+            <span>{t.message}</span>
+          </div>
+        ))}
       </div>
     </>
   )

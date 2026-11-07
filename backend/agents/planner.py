@@ -1,58 +1,104 @@
 """
-planner.py — Planner Agent
-Breaks the user query into 2-4 focused sub-tasks using Structured Outputs.
+planner.py — Planner Agent (Agent 1)
+
+Decomposes a user research query into 2 to 4 focused, atomic sub-tasks
+using Pydantic structured output. Validates sub-task count and contents,
+handles malformed model output, and reports genuine status (completed vs fallback).
 """
 
-from pydantic import BaseModel, Field
+import logging
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field, field_validator
+
 from backend.core.llm import get_llm
+
+logger = logging.getLogger(__name__)
 
 
 class Plan(BaseModel):
-    sub_tasks: list[str] = Field(
+    sub_tasks: List[str] = Field(
         description="List of 2 to 4 focused, atomic sub-tasks to research."
     )
     reasoning: str = Field(
-        description="One sentence explaining the decomposition strategy."
+        description="One or two sentences explaining the decomposition strategy."
     )
 
+    @field_validator("sub_tasks")
+    @classmethod
+    def validate_sub_tasks(cls, v: List[str]) -> List[str]:
+        # Filter non-empty strings and strip whitespace
+        cleaned = [t.strip() for t in v if isinstance(t, str) and t.strip()]
+        # Deduplicate preserving order
+        deduped = list(dict.fromkeys(cleaned))
+        if len(deduped) < 2:
+            raise ValueError(f"Expected at least 2 distinct sub-tasks, got {len(deduped)}")
+        return deduped[:4]
 
-PLANNER_PROMPT = """You are a Research Planner. Break the user's query into 2 to 4 focused sub-tasks that together produce a comprehensive answer.
+
+PLANNER_PROMPT = """You are an expert Research Planner. Break the user's research query into 2 to 4 focused, atomic sub-tasks that together produce a comprehensive and balanced report.
 
 User Query: {query}
-Documents uploaded: {has_docs}
+Session has uploaded documents: {has_docs}
 
 Rules:
-- If documents are uploaded, include sub-tasks that reference them explicitly.
-- Each sub-task must be atomic and independently answerable."""
+1. Generate between 2 and 4 sub-tasks (strictly no fewer than 2, no more than 4).
+2. Each sub-task must be concrete, atomic, and answerable independently.
+3. If documents are uploaded, formulate sub-tasks that reference the document context and data points.
+4. If no documents are uploaded, focus on key concepts, comparison, implications, and foundational knowledge.
+5. Provide a succinct one-sentence rationale for your decomposition strategy."""
 
 
-def run_planner(query: str, has_documents: bool) -> dict:
+def run_planner(query: str, has_documents: bool) -> Dict[str, Any]:
     """
     Agent 1 — Planner.
-    Input:  user query string, bool flag for documents
-    Output: {"sub_tasks": [...], "reasoning": "..."}
+    Input:
+        query: User research question (non-empty string)
+        has_documents: Flag indicating if document knowledge base is available
+    Output:
+        {
+            "sub_tasks": List[str],
+            "reasoning": str,
+            "status": "completed" | "fallback",
+            "error": Optional[str],
+        }
     """
-    llm = get_llm()
-    structured_llm = llm.with_structured_output(Plan)
-
-    prompt = PLANNER_PROMPT.format(
-        query=query,
-        has_docs="Yes" if has_documents else "No",
-    )
-
-    try:
-        plan: Plan = structured_llm.invoke(prompt)
-
+    cleaned_query = query.strip()
+    if not cleaned_query:
         return {
-            "sub_tasks": plan.sub_tasks if plan.sub_tasks else [query],
-            "reasoning": plan.reasoning,
-            "error": None,
+            "sub_tasks": ["Empty query provided."],
+            "reasoning": "Query was empty.",
+            "status": "fallback",
+            "error": "Query string is empty.",
         }
 
+    try:
+        llm = get_llm()
+        structured_llm = llm.with_structured_output(Plan)
+
+        prompt = PLANNER_PROMPT.format(
+            query=cleaned_query,
+            has_docs="Yes (retrieve from knowledge store)" if has_documents else "No (general knowledge)",
+        )
+
+        plan: Plan = structured_llm.invoke(prompt)
+
+        # Extra safety check on returned subtasks
+        if plan and plan.sub_tasks and len(plan.sub_tasks) >= 2:
+            return {
+                "sub_tasks": plan.sub_tasks,
+                "reasoning": plan.reasoning.strip() or "Decomposed query into focused sub-tasks.",
+                "status": "completed",
+                "error": None,
+            }
+        else:
+            raise ValueError("Planner model returned insufficient sub-tasks.")
+
     except Exception as e:
-        # Graceful fallback — treat original query as single task
+        logger.warning("Planner structured output encountered error, falling back: %s", e)
+        # Graceful fallback: return original query as single research task
         return {
-            "sub_tasks": [query],
-            "reasoning": "Fallback to single-task mode.",
-            "error": f"Planner warning: {str(e)}",
+            "sub_tasks": [cleaned_query],
+            "reasoning": "Direct query execution (structured planning fallback engaged).",
+            "status": "fallback",
+            "error": f"Planner notice: {str(e)}",
         }

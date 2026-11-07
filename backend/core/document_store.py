@@ -1,18 +1,20 @@
 """
-document_store.py — Document loading, chunking, embedding, and
-                    FAISS vector store creation/retrieval.
+document_store.py — Document loading, chunking, embedding, and FAISS retrieval.
 
-Embeddings are computed via the Gemini API (langchain_google_genai), not a
-local sentence-transformers model. A local model + torch pulls in several
-hundred MB of RAM just to import, which reliably OOMs on free-tier hosts
-with a 512MB limit (Render, Railway free plans, etc.). Calling out to
-Gemini's embedding endpoint keeps the whole app's memory footprint small
-enough to run comfortably within that limit, at the cost of one extra
-network round-trip per chunk (batched, so it's still fast).
+Embeddings are computed via the Google Gemini API (langchain_google_genai),
+avoiding local PyTorch / SentenceTransformer models to keep memory footprint
+well within free-tier limits (e.g. Render 512MB RAM).
+
+Supported formats: PDF (.pdf), Word (.docx), Plain Text (.txt).
+Legacy binary .doc files are explicitly rejected with an informative error.
 """
 
+import json
+import uuid
+import logging
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any, Optional
+from datetime import datetime
 
 from langchain_core.documents import Document
 from langchain_community.document_loaders import (
@@ -25,20 +27,19 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from backend.core.config import settings
 
-# ── Embeddings (Gemini API — no local model, minimal RAM) ─────────────────────
-# Lazy-loaded so importing this module (e.g. for /health or tests) doesn't
-# require a configured API key.
-_embeddings_instance = None
+logger = logging.getLogger(__name__)
+
+# ── Embeddings (Gemini API — no local PyTorch / model weights) ────────────────
+_embeddings_instance: Optional[GoogleGenerativeAIEmbeddings] = None
 
 
 def _get_embeddings() -> GoogleGenerativeAIEmbeddings:
     global _embeddings_instance
     if _embeddings_instance is None:
-        if not settings.gemini_api_key:
+        if not settings.gemini_api_key.strip():
             raise RuntimeError(
                 "GEMINI_API_KEY is required for document embeddings "
-                "(RAG/document upload), even if you're using a different "
-                "provider for chat. Set it in your .env file."
+                "(RAG / document upload). Set GEMINI_API_KEY in your .env file."
             )
         _embeddings_instance = GoogleGenerativeAIEmbeddings(
             model=settings.gemini_embedding_model,
@@ -47,7 +48,7 @@ def _get_embeddings() -> GoogleGenerativeAIEmbeddings:
     return _embeddings_instance
 
 
-# ── Text splitter ──────────────────────────────────────────────────────────────
+# ── Text splitter ─────────────────────────────────────────────────────────────
 _splitter = RecursiveCharacterTextSplitter(
     chunk_size=800,
     chunk_overlap=150,
@@ -55,37 +56,115 @@ _splitter = RecursiveCharacterTextSplitter(
 )
 
 
+import re
+
+def validate_session_id(session_id: str) -> str:
+    """
+    Validate that session_id is safe against path traversal and conforms to a
+    safe UUID / alphanumeric identifier format (e.g. UUID4 string).
+    Blocks directory traversal attempts (../, ..\\, etc.) and invalid characters.
+    """
+    s = str(session_id).strip()
+    if not s or not re.match(r"^[a-zA-Z0-9_\-]+$", s) or ".." in s or len(s) > 128:
+        raise ValueError(f"Invalid session ID format: '{session_id}'. Must be a valid UUID or safe identifier.")
+    return s
+
+
 def load_documents(file_path: Path) -> List[Document]:
-    """Load a PDF, DOCX, or TXT file into LangChain Document objects."""
+    """
+    Load a PDF, DOCX, or TXT file into LangChain Document objects.
+    Validates file existence, non-zero size, and text readability.
+    """
+    if not file_path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    if file_path.stat().st_size == 0:
+        raise ValueError(f"Uploaded file '{file_path.name}' is empty (0 bytes).")
+
     suffix = file_path.suffix.lower()
+
     if suffix == ".pdf":
         loader = PyPDFLoader(str(file_path))
-    elif suffix in (".docx", ".doc"):
+        docs = loader.load()
+    elif suffix == ".docx":
         loader = Docx2txtLoader(str(file_path))
+        docs = loader.load()
+    elif suffix == ".doc":
+        raise ValueError(
+            f"Legacy binary Word format (.doc) is not supported for '{file_path.name}'. "
+            "Please convert the file to .docx or .pdf before uploading."
+        )
     elif suffix == ".txt":
-        loader = TextLoader(str(file_path), encoding="utf-8")
+        # Handle UTF-8 with fallback to Latin-1
+        try:
+            loader = TextLoader(str(file_path), encoding="utf-8")
+            docs = loader.load()
+        except UnicodeDecodeError:
+            loader = TextLoader(str(file_path), encoding="latin-1")
+            docs = loader.load()
     else:
         raise ValueError(
-            f"Unsupported file type: '{suffix}'. Allowed: .pdf, .docx, .doc, .txt"
+            f"Unsupported file type: '{suffix}'. Allowed formats: .pdf, .docx, .txt"
         )
-    return loader.load()
+
+    # Validate extracted text content
+    total_chars = sum(len(d.page_content.strip()) for d in docs)
+    if total_chars == 0:
+        raise ValueError(f"Uploaded file '{file_path.name}' contains no readable text content.")
+
+    return docs
 
 
-def ingest_file(file_path: Path, session_id: str) -> dict:
+def _get_manifest_path(store_path: Path) -> Path:
+    return store_path / "manifest.json"
+
+
+def _read_manifest(store_path: Path) -> List[Dict[str, Any]]:
+    manifest_file = _get_manifest_path(store_path)
+    if manifest_file.exists():
+        try:
+            with open(manifest_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning("Could not read manifest at %s: %s", manifest_file, e)
+    return []
+
+
+def _write_manifest(store_path: Path, manifest: List[Dict[str, Any]]):
+    manifest_file = _get_manifest_path(store_path)
+    with open(manifest_file, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+
+def ingest_file(file_path: Path, session_id: str) -> Dict[str, Any]:
     """
-    Load → chunk → embed → persist vector store for one file.
+    Load → chunk → embed → persist FAISS vector store for one file.
     Merges with existing store if session already has documents.
-    Returns: {"num_chunks": int, "store_path": str}
+    Prevents duplicate ingestion of identical files in the same session.
     """
+    valid_session = validate_session_id(session_id)
     docs = load_documents(file_path)
     chunks = _splitter.split_documents(docs)
 
-    for chunk in chunks:
-        chunk.metadata["source_file"] = file_path.name
-        chunk.metadata["session_id"] = session_id
-
-    store_path = settings.vectorstore_dir / session_id
+    store_path = settings.vectorstore_dir / valid_session
     store_path.mkdir(parents=True, exist_ok=True)
+
+    manifest = _read_manifest(store_path)
+    existing_files = [m["filename"] for m in manifest]
+
+    if file_path.name in existing_files:
+        logger.info("File '%s' already indexed for session %s. Skipping duplicate.", file_path.name, valid_session)
+        existing_entry = next(m for m in manifest if m["filename"] == file_path.name)
+        return {
+            "num_chunks": existing_entry.get("num_chunks", len(chunks)),
+            "store_path": str(store_path),
+            "is_duplicate": True,
+        }
+
+    for idx, chunk in enumerate(chunks):
+        chunk.metadata["source_file"] = file_path.name
+        chunk.metadata["session_id"] = valid_session
+        chunk.metadata["chunk_index"] = idx
 
     from langchain_community.vectorstores import FAISS
 
@@ -93,27 +172,45 @@ def ingest_file(file_path: Path, session_id: str) -> dict:
 
     if index_file.exists():
         # Merge into existing store so multiple uploads share one session index
-        existing = FAISS.load_local(
+        existing_vs = FAISS.load_local(
             str(store_path),
             _get_embeddings(),
             allow_dangerous_deserialization=True,
         )
-        existing.add_documents(chunks)
-        existing.save_local(str(store_path))
+        existing_vs.add_documents(chunks)
+        existing_vs.save_local(str(store_path))
     else:
         vs = FAISS.from_documents(chunks, _get_embeddings())
         vs.save_local(str(store_path))
 
-    return {"num_chunks": len(chunks), "store_path": str(store_path)}
+    # Update manifest
+    manifest.append({
+        "filename": file_path.name,
+        "num_chunks": len(chunks),
+        "uploaded_at": datetime.now().isoformat(),
+        "file_size_bytes": file_path.stat().st_size,
+    })
+    _write_manifest(store_path, manifest)
+
+    return {
+        "num_chunks": len(chunks),
+        "store_path": str(store_path),
+        "is_duplicate": False,
+    }
 
 
 def get_retriever(session_id: str, k: int = 5):
-    """Return a retriever for an existing session's FAISS vector store."""
-    store_path = settings.vectorstore_dir / session_id
+    """
+    Return a similarity retriever for an existing session's FAISS vector store.
+    Validates session isolation to ensure only authorized session directories are loaded.
+    """
+    valid_session = validate_session_id(session_id)
+    store_path = settings.vectorstore_dir / valid_session
+    index_file = store_path / "index.faiss"
 
-    if not store_path.exists():
+    if not index_file.exists():
         raise FileNotFoundError(
-            f"No vector store found for session '{session_id}'. "
+            f"No vector store index found for session '{valid_session}'. "
             "Please upload a document first."
         )
 
@@ -128,6 +225,20 @@ def get_retriever(session_id: str, k: int = 5):
 
 
 def session_has_documents(session_id: str) -> bool:
-    """Check whether a session already has an ingested vector store."""
-    store_path = settings.vectorstore_dir / session_id
-    return store_path.exists() and any(store_path.iterdir())
+    """Check whether a session already has an ingested vector store index."""
+    try:
+        valid_session = validate_session_id(session_id)
+        store_path = settings.vectorstore_dir / valid_session
+        return (store_path / "index.faiss").exists()
+    except Exception:
+        return False
+
+
+def get_session_documents(session_id: str) -> List[Dict[str, Any]]:
+    """Return the list of ingested document manifests for a session."""
+    try:
+        valid_session = validate_session_id(session_id)
+        store_path = settings.vectorstore_dir / valid_session
+        return _read_manifest(store_path)
+    except Exception:
+        return []
