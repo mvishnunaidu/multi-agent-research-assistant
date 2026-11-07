@@ -23,7 +23,7 @@ class Settings(BaseSettings):
         default="models/gemini-embedding-001"
     )
     openai_model: str = Field(default="gpt-4o-mini")
-    groq_model: str = Field(default="llama-3.3-70b-versatile")
+    groq_model: str = Field(default="qwen/qwen3.8-27b")
     deepseek_model: str = Field(default="deepseek-chat")
 
     # CORS - comma-separated list of allowed origins for the frontend dev server
