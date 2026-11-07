@@ -87,10 +87,31 @@ body {
 }
 
 /* ── Custom Scrollbar ──────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(0, 242, 254, 0.3); }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 242, 254, 0.35) rgba(7, 10, 20, 0.6);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(7, 10, 20, 0.6);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 242, 254, 0.3);
+  border-radius: 99px;
+  border: 1px solid rgba(7, 10, 20, 0.5);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cyan-primary);
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+}
 
 /* ── Glass Sidebar ─────────────────────────────────────────────────────────── */
 .sidebar {
@@ -306,6 +327,10 @@ body {
 /* ── Main Workspace ────────────────────────────────────────────────────────── */
 .main-content {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -384,15 +409,22 @@ body {
 
 /* ── Workspace Body ────────────────────────────────────────────────────────── */
 .workspace-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 28px 36px 120px 36px;
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 100%;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  padding: 28px 36px 200px 36px;
   display: flex;
   flex-direction: column;
   gap: 28px;
   max-width: 1240px;
   margin: 0 auto;
   width: 100%;
+  box-sizing: border-box;
 }
 
 /* ── Central Hero Card (Matching Screenshot 1) ─────────────────────────────── */
@@ -1144,6 +1176,109 @@ body {
   pointer-events: none;
 }
 
+.dock-outer-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 860px;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+/* ── ChatGPT-Style Attached Documents Tray ─────────────────────────────────── */
+.dock-attached-tray {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(10, 16, 30, 0.94);
+  border: 1px solid rgba(0, 242, 254, 0.22);
+  border-radius: 14px;
+  padding: 6px 14px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  animation: fadeIn 0.2s ease-out;
+  overflow-x: auto;
+}
+
+.dock-attached-tray-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cyan-primary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.dock-attached-chips-scroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dock-attached-chips-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.dock-attached-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(0, 242, 254, 0.08);
+  border: 1px solid rgba(0, 242, 254, 0.28);
+  border-radius: 99px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #ffffff;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.dock-attached-chip:hover {
+  background: rgba(0, 242, 254, 0.14);
+  border-color: var(--cyan-primary);
+}
+
+.chip-file-icon {
+  display: flex;
+  align-items: center;
+  color: var(--cyan-primary);
+}
+
+.chip-file-name {
+  font-weight: 500;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-file-size {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+.chip-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 50%;
+  transition: all 0.2s;
+  margin-left: 2px;
+}
+
+.chip-remove-btn:hover {
+  color: #ff4d4d;
+  background: rgba(255, 77, 77, 0.18);
+}
+
 .dock-inner {
   display: flex;
   align-items: center;
@@ -1151,9 +1286,8 @@ body {
   background: rgba(10, 16, 30, 0.88);
   border: 1px solid rgba(0, 242, 254, 0.25);
   border-radius: 20px;
-  padding: 8px 12px 8px 16px;
+  padding: 8px 12px 8px 14px;
   width: 100%;
-  max-width: 860px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 242, 254, 0.08);
   backdrop-filter: blur(24px);
   pointer-events: auto;
@@ -1163,6 +1297,33 @@ body {
 .dock-inner:focus-within {
   border-color: var(--cyan-primary);
   box-shadow: 0 12px 45px rgba(0, 0, 0, 0.6), 0 0 25px rgba(0, 242, 254, 0.2);
+}
+
+.dock-attach-btn {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.dock-attach-btn:hover:not(:disabled) {
+  background: rgba(0, 242, 254, 0.12);
+  border-color: rgba(0, 242, 254, 0.4);
+  color: var(--cyan-primary);
+  transform: translateY(-1px);
+}
+
+.dock-attach-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .mode-toggle-btn {
@@ -1246,6 +1407,84 @@ body {
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+/* ── Chat Attached Document Badges (ChatGPT Style) ─────────────────────────── */
+.chat-bubble-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.chat-attached-file-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  border-radius: 12px;
+  padding: 8px 12px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.chat-attached-file-icon {
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 242, 254, 0.12);
+  border: 1px solid rgba(0, 242, 254, 0.25);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cyan-primary);
+  flex-shrink: 0;
+}
+
+.chat-attached-file-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-attached-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-attached-file-size {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+/* ── Document Table Remove Button ─────────────────────────────────────────── */
+.doc-table-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 77, 77, 0.1);
+  border: 1px solid rgba(255, 77, 77, 0.3);
+  color: #ff6b6b;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.doc-table-delete-btn:hover {
+  background: rgba(255, 77, 77, 0.22);
+  border-color: #ff4d4d;
+  color: #ff4d4d;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 77, 77, 0.25);
 }
 
 /* ── Spinner & Toasts ──────────────────────────────────────────────────────── */
@@ -1847,6 +2086,29 @@ body {
     right: 0;
     bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     padding: 0 8px;
+  }
+
+  .dock-outer-wrapper {
+    max-width: 100%;
+    gap: 6px;
+  }
+
+  .dock-attached-tray {
+    padding: 4px 10px;
+    gap: 6px;
+    border-radius: 12px;
+  }
+
+  .dock-attached-chip {
+    padding: 2px 8px;
+    font-size: 11px;
+    max-width: 140px;
+  }
+
+  .dock-attach-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
   }
 
   .dock-inner {

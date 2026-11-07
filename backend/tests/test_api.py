@@ -169,3 +169,16 @@ def test_research_happy_path_mocked(client, monkeypatch):
     assert data["final_report"].startswith("# Research Report")
     assert len(data["agent_steps"]) == 4
     assert data["overall_status"] == "completed"
+
+
+def test_delete_document_not_found(client):
+    sid = client.post("/api/v1/session/new").json()["session_id"]
+    r = client.delete(f"/api/v1/documents/{sid}/nonexistent.pdf")
+    assert r.status_code == 404
+
+
+def test_clear_all_documents(client):
+    sid = client.post("/api/v1/session/new").json()["session_id"]
+    r = client.delete(f"/api/v1/documents/{sid}")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"

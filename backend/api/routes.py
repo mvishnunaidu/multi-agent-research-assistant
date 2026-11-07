@@ -29,6 +29,8 @@ from backend.core.document_store import (
     session_has_documents,
     validate_session_id,
     get_session_documents,
+    delete_session_document,
+    clear_session_documents,
     get_retriever,
 )
 from backend.core.llm import get_llm, get_configured_providers
@@ -231,6 +233,46 @@ async def list_documents(session_id: str):
         for d in raw_docs
     ]
     return SessionDocumentsResponse(session_id=valid_session, documents=items)
+
+
+@router.delete("/documents/{session_id}/{filename:path}", tags=["Documents"])
+async def delete_document(session_id: str, filename: str):
+    """
+    Remove a specific uploaded document from the session knowledge base,
+    deleting its physical file and re-indexing remaining documents in FAISS.
+    """
+    try:
+        valid_session = validate_session_id(session_id)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+    safe_name = sanitize_filename(filename)
+    success = await asyncio.to_thread(delete_session_document, valid_session, safe_name)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Document '{safe_name}' not found in session.")
+
+    return {
+        "status": "ok",
+        "message": f"Document '{safe_name}' deleted and removed from vector store.",
+        "filename": safe_name,
+        "session_id": valid_session,
+    }
+
+
+@router.delete("/documents/{session_id}", tags=["Documents"])
+async def clear_all_documents(session_id: str):
+    """Clear all documents and FAISS vector index for a session."""
+    try:
+        valid_session = validate_session_id(session_id)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+    await asyncio.to_thread(clear_session_documents, valid_session)
+    return {
+        "status": "ok",
+        "message": "All session documents and vector indexes cleared.",
+        "session_id": valid_session,
+    }
 
 
 # ── Chat (direct conversational mode) ──────────────────────────────────────────

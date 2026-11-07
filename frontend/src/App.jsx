@@ -18,7 +18,9 @@ import {
   FileCode,
   FolderOpen,
   Menu,
-  X
+  X,
+  Paperclip,
+  Trash2
 } from 'lucide-react'
 import './index.css'
 
@@ -314,7 +316,15 @@ export default function App() {
     } else {
       // Conversational Chat Mode
       setNavTab('chat')
-      const userMsg = { role: 'user', content: text, timestamp: new Date().toLocaleTimeString() }
+      const userMsg = {
+        role: 'user',
+        content: text,
+        timestamp: new Date().toLocaleTimeString(),
+        attachments: documents.map(d => ({
+          filename: d.filename,
+          file_size_bytes: d.file_size_bytes,
+        })),
+      }
       setChatMessages(prev => [...prev, userMsg])
 
       try {
@@ -375,6 +385,41 @@ export default function App() {
     setCopiedSession(true)
     setTimeout(() => setCopiedSession(false), 2000)
     addToast('Session UUID copied.', 'info')
+  }
+
+  const clearHistory = async () => {
+    if (!sessionId) return
+    try {
+      await safeFetchJson(`${API_BASE}/history/${sessionId}`, { method: 'DELETE' })
+      setSessionHistory([])
+      addToast('Session history cleared.', 'info')
+    } catch (err) {
+      addToast(`Could not clear history: ${err.message}`, 'error')
+    }
+  }
+
+  const handleDeleteDocument = async (filename) => {
+    if (!sessionId || !filename) return
+    try {
+      await safeFetchJson(`${API_BASE}/documents/${sessionId}/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+      })
+      addToast(`"${filename}" removed from knowledge base.`, 'info')
+      await loadDocuments(sessionId)
+    } catch (err) {
+      addToast(`Could not remove "${filename}": ${err.message}`, 'error')
+    }
+  }
+
+  const handleClearAllDocuments = async () => {
+    if (!sessionId) return
+    try {
+      await safeFetchJson(`${API_BASE}/documents/${sessionId}`, { method: 'DELETE' })
+      addToast('All session documents and vector indexes cleared.', 'info')
+      await loadDocuments(sessionId)
+    } catch (err) {
+      addToast(`Could not clear documents: ${err.message}`, 'error')
+    }
   }
 
   const resetAll = () => {
@@ -513,6 +558,21 @@ export default function App() {
 
       {/* ── Main Area ──────────────────────────────────────────────────────── */}
       <div className="main-content">
+        {/* Global hidden file input for paperclip and dropzone */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept=".pdf,.docx,.txt"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            if (e.target.files && e.target.files.length > 0) {
+              handleFileUpload(e.target.files)
+              e.target.value = ''
+            }
+          }}
+        />
+
         {/* Top Header */}
         <header className="top-header">
           <div className="header-left">
@@ -743,9 +803,27 @@ export default function App() {
                       {msg.role === 'user' ? 'U' : 'AI'}
                     </div>
                     <div className="chat-card">
+                      {/* ChatGPT-style attached document badges inside user message */}
+                      {msg.role === 'user' && msg.attachments && msg.attachments.length > 0 && (
+                        <div className="chat-bubble-attachments">
+                          {msg.attachments.map((att, aIdx) => (
+                            <div key={aIdx} className="chat-attached-file-badge">
+                              <div className="chat-attached-file-icon">
+                                <FileText size={15} />
+                              </div>
+                              <div className="chat-attached-file-details">
+                                <span className="chat-attached-file-name">{att.filename}</span>
+                                <span className="chat-attached-file-size">
+                                  {att.file_size_bytes ? formatBytes(att.file_size_bytes) : 'Document'} · Knowledge Context
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                       {msg.sources && msg.sources.length > 0 && (
-                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: 6 }}>
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {msg.sources.map((s, sidx) => (
                             <span key={sidx} className="source-badge">
                               <FileText size={10} /> {s}
@@ -794,15 +872,6 @@ export default function App() {
                   }
                 }}
               >
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept=".pdf,.docx,.txt"
-                  multiple
-                  onChange={(e) => {
-                    if (e.target.files) handleFileUpload(e.target.files)
-                  }}
-                />
                 <div className="dropzone-icon-wrap">
                   <Upload size={28} />
                 </div>
@@ -823,10 +892,35 @@ export default function App() {
 
               <div className="docs-list-card">
                 <div className="docs-list-header">
-                  <h3>Session Documents in Vector Index</h3>
-                  <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                    {documents.length} document{documents.length === 1 ? '' : 's'} indexed
-                  </span>
+                  <div>
+                    <h3>Session Documents in Vector Index</h3>
+                    <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                      {documents.length} document{documents.length === 1 ? '' : 's'} indexed
+                    </span>
+                  </div>
+                  {documents.length > 0 && (
+                    <button
+                      type="button"
+                      className="copy-mini-btn"
+                      style={{
+                        background: 'rgba(255, 77, 77, 0.12)',
+                        border: '1px solid rgba(255, 77, 77, 0.35)',
+                        color: '#ff4d4d',
+                        padding: '5px 12px',
+                        borderRadius: 8,
+                        fontSize: 11.5,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                      onClick={handleClearAllDocuments}
+                      title="Clear all documents from knowledge base"
+                    >
+                      <Trash2 size={12} />
+                      Clear All Documents
+                    </button>
+                  )}
                 </div>
 
                 {documents.length === 0 ? (
@@ -843,6 +937,7 @@ export default function App() {
                           <th>File Size</th>
                           <th>Ingested At</th>
                           <th>Status</th>
+                          <th style={{ textAlign: 'right' }}>Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -862,6 +957,17 @@ export default function App() {
                                 <CheckCircle2 size={11} /> Ready
                               </span>
                             </td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button
+                                type="button"
+                                className="doc-table-delete-btn"
+                                onClick={() => handleDeleteDocument(doc.filename)}
+                                title={`Remove "${doc.filename}" from knowledge base`}
+                              >
+                                <Trash2 size={13} />
+                                <span>Remove</span>
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -876,10 +982,22 @@ export default function App() {
           {navTab === 'history' && (
             <div className="history-list-card">
               <div className="docs-list-header">
-                <h3>Session Query History</h3>
-                <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                  {sessionHistory.length} query record{sessionHistory.length === 1 ? '' : 's'}
-                </span>
+                <div>
+                  <h3>Session Query History</h3>
+                  <span style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                    {sessionHistory.length} query record{sessionHistory.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                {sessionHistory.length > 0 && (
+                  <button
+                    className="copy-mini-btn"
+                    style={{ background: 'rgba(255, 77, 77, 0.12)', border: '1px solid rgba(255, 77, 77, 0.35)', color: '#ff4d4d', padding: '4px 10px', borderRadius: 8, fontSize: 11, cursor: 'pointer' }}
+                    onClick={clearHistory}
+                    title="Clear history"
+                  >
+                    Clear History
+                  </button>
+                )}
               </div>
 
               {sessionHistory.length === 0 ? (
@@ -915,57 +1033,105 @@ export default function App() {
           )}
         </div>
 
-        {/* ── Floating Input Dock (Matching Screenshot 1) ──────────────────── */}
+        {/* ── Floating Input Dock (Matching Screenshot 1 & ChatGPT Style) ─────── */}
         <div className="floating-input-dock">
-          <div className="dock-inner">
-            <button
-              className={`mode-toggle-btn ${mode === 'research' ? 'research' : ''}`}
-              onClick={() => {
-                const nextMode = mode === 'research' ? 'chat' : 'research'
-                setMode(nextMode)
-                setNavTab(nextMode)
-              }}
-              title="Click to toggle between 4-Agent Research and Direct Chat"
-            >
-              {mode === 'research' ? <FlaskConical size={14} /> : <MessageSquare size={14} />}
-              <span>{mode === 'research' ? 'Research' : 'Chat'}</span>
-            </button>
+          <div className="dock-outer-wrapper">
+            {/* ChatGPT-style attached document chips tray */}
+            {documents.length > 0 && (
+              <div className="dock-attached-tray">
+                <div className="dock-attached-tray-label">
+                  <FileText size={12} color="var(--cyan-primary)" />
+                  <span>Context ({documents.length}):</span>
+                </div>
+                <div className="dock-attached-chips-scroll">
+                  {documents.map((doc, dIdx) => (
+                    <div
+                      key={dIdx}
+                      className="dock-attached-chip"
+                      title={`${doc.filename} (${formatBytes(doc.file_size_bytes)})`}
+                    >
+                      <div className="chip-file-icon">
+                        <FileText size={12} />
+                      </div>
+                      <span className="chip-file-name">{doc.filename}</span>
+                      <span className="chip-file-size">{formatBytes(doc.file_size_bytes)}</span>
+                      <button
+                        type="button"
+                        className="chip-remove-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteDocument(doc.filename)
+                        }}
+                        title={`Remove "${doc.filename}" from context`}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-            <textarea
-              className="dock-textarea"
-              placeholder={
-                mode === 'research'
-                  ? 'Enter research question — the 4-agent pipeline will run...'
-                  : 'Ask anything, or upload docs to chat with them...'
-              }
-              value={inputQuery}
-              onChange={(e) => setInputQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSend()
+            <div className="dock-inner">
+              <button
+                type="button"
+                className="dock-attach-btn"
+                onClick={() => fileInputRef.current?.click()}
+                title="Attach PDF, DOCX, or TXT document"
+                disabled={isUploading}
+              >
+                <Paperclip size={16} />
+              </button>
+
+              <button
+                className={`mode-toggle-btn ${mode === 'research' ? 'research' : ''}`}
+                onClick={() => {
+                  const nextMode = mode === 'research' ? 'chat' : 'research'
+                  setMode(nextMode)
+                  setNavTab(nextMode)
+                }}
+                title="Click to toggle between 4-Agent Research and Direct Chat"
+              >
+                {mode === 'research' ? <FlaskConical size={14} /> : <MessageSquare size={14} />}
+                <span>{mode === 'research' ? 'Research' : 'Chat'}</span>
+              </button>
+
+              <textarea
+                className="dock-textarea"
+                placeholder={
+                  mode === 'research'
+                    ? 'Enter research question — the 4-agent pipeline will run...'
+                    : 'Ask anything, or upload docs to chat with them...'
                 }
-              }}
-              rows={1}
-              disabled={isLoading}
-            />
+                value={inputQuery}
+                onChange={(e) => setInputQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSend()
+                  }
+                }}
+                rows={1}
+                disabled={isLoading}
+              />
 
-            <span className="dock-hint">
-              Enter to send · Shift+Enter for new line
-            </span>
+              <span className="dock-hint">
+                Enter to send · Shift+Enter for new line
+              </span>
 
-            <button
-              className="dock-send-btn"
-              onClick={() => handleSend()}
-              disabled={isLoading || !inputQuery.trim()}
-              aria-label="Send message"
-            >
-              {isLoading ? (
-                <div className="spinner-sm" />
-              ) : (
-                <Send size={18} />
-              )}
-            </button>
+              <button
+                className="dock-send-btn"
+                onClick={() => handleSend()}
+                disabled={isLoading || !inputQuery.trim()}
+                aria-label="Send message"
+              >
+                {isLoading ? (
+                  <div className="spinner-sm" />
+                ) : (
+                  <Send size={18} />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>

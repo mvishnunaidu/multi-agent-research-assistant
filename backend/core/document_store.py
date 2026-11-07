@@ -253,3 +253,96 @@ def get_session_documents(session_id: str) -> List[Dict[str, Any]]:
         return _read_manifest(store_path)
     except Exception:
         return []
+
+
+def delete_session_document(session_id: str, filename: str) -> bool:
+    """
+    Remove a specific document from a session.
+    Updates the manifest, cleans up the upload file, and rebuilds the vector index
+    from remaining documents (or deletes the index if 0 documents remain).
+    """
+    valid_session = validate_session_id(session_id)
+    store_path = settings.vectorstore_dir / valid_session
+    upload_session_dir = settings.upload_dir / valid_session
+
+    if not store_path.exists():
+        return False
+
+    manifest = _read_manifest(store_path)
+    clean_target = Path(filename).name
+    remaining_manifest = [d for d in manifest if d.get("filename") != clean_target]
+
+    if len(remaining_manifest) == len(manifest):
+        return False
+
+    # 1. Remove physical uploaded file if present
+    target_upload_file = upload_session_dir / clean_target
+    if target_upload_file.exists():
+        try:
+            target_upload_file.unlink()
+        except Exception as e:
+            logger.warning("Could not delete upload file %s: %s", target_upload_file, e)
+
+    # 2. Update manifest
+    _write_manifest(store_path, remaining_manifest)
+
+    # 3. Evict from memory cache
+    _vectorstore_cache.pop(valid_session, None)
+
+    # 4. If no documents remain, delete index files
+    if not remaining_manifest:
+        index_file = store_path / "index.faiss"
+        pkl_file = store_path / "index.pkl"
+        if index_file.exists():
+            index_file.unlink()
+        if pkl_file.exists():
+            pkl_file.unlink()
+        return True
+
+    # 5. If documents remain, rebuild index from remaining upload files
+    from langchain_community.vectorstores import FAISS
+
+    all_chunks = []
+    for item in remaining_manifest:
+        f_name = item.get("filename")
+        f_path = upload_session_dir / f_name
+        if f_path.exists():
+            try:
+                docs = load_and_split_document(f_path)
+                for idx, chunk in enumerate(docs):
+                    chunk.metadata["source_file"] = f_name
+                    chunk.metadata["session_id"] = valid_session
+                    chunk.metadata["chunk_index"] = idx
+                all_chunks.extend(docs)
+            except Exception as e:
+                logger.error("Error re-indexing file %s: %s", f_name, e)
+
+    if all_chunks:
+        new_vs = FAISS.from_documents(all_chunks, _get_embeddings())
+        new_vs.save_local(str(store_path))
+        _vectorstore_cache[valid_session] = new_vs
+    else:
+        index_file = store_path / "index.faiss"
+        pkl_file = store_path / "index.pkl"
+        if index_file.exists():
+            index_file.unlink()
+        if pkl_file.exists():
+            pkl_file.unlink()
+
+    return True
+
+
+def clear_session_documents(session_id: str) -> bool:
+    """Clear all documents and delete the FAISS vector index for a session."""
+    valid_session = validate_session_id(session_id)
+    store_path = settings.vectorstore_dir / valid_session
+    upload_session_dir = settings.upload_dir / valid_session
+
+    _vectorstore_cache.pop(valid_session, None)
+
+    import shutil
+    if store_path.exists():
+        shutil.rmtree(store_path, ignore_errors=True)
+    if upload_session_dir.exists():
+        shutil.rmtree(upload_session_dir, ignore_errors=True)
+    return True
