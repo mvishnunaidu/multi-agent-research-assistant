@@ -1,0 +1,24 @@
+# Quantum Computing: Fundamentals, Architectures, and NISQ-Era Milestones
+Author: Quantum Computing Research Initiative
+Date: February 2026
+
+## 1. Executive Summary
+Quantum computing represents a paradigm shift from classical digital computation. While classical computers process binary information using bits that represent either 0 or 1, quantum computers leverage the fundamental principles of quantum mechanics—namely superposition, entanglement, and interference—to evaluate complex computational spaces exponentially faster for specific algorithmic classes.
+
+## 2. Core Quantum Principles
+1. Superposition: A qubit (quantum bit) can exist in a linear combination of basis states |0⟩ and |1⟩, expressed mathematically as |ψ⟩ = α|0⟩ + β|1⟩, where |α|² + |β|² = 1. This allows an n-qubit system to represent 2^n states simultaneously.
+2. Entanglement: Quantum entanglement describes a non-local correlation between two or more qubits such that the quantum state of any individual qubit cannot be described independently of the state of the others.
+3. Quantum Interference: Quantum algorithms choreograph constructive interference to amplify the probability amplitudes of correct solutions while using destructive interference to cancel out incorrect answers upon measurement.
+
+## 3. Physical Qubit Implementations
+Leading hardware modalities include:
+- Superconducting Transmon Qubits (IBM, Google Quantum AI): Microscopic circuits fabricated on silicon or sapphire substrates, operated at cryogenic dilution temperatures (~15 millikelvin).
+- Trapped-Ion Systems (IonQ, Quantinuum): Individual atomic ions trapped via electromagnetic fields and manipulated via optical lasers, boasting high two-qubit gate fidelities (>99.9%).
+- Neutral Atom Arrays (QuEra): Rubidium or cesium atoms held in optical tweezers, offering scalable 2D and 3D geometric configurations.
+- Photonic Qubits (PsiQuantum): Photons manipulated in silicon photonic waveguides operating largely at room temperature.
+
+## 4. Current Challenges: Error Mitigation & Quantum Advantage
+In the current Noisy Intermediate-Scale Quantum (NISQ) era, quantum processors lack full fault tolerance:
+- Coherence Times: Environmental decoherence limits the depth of quantum circuits before quantum states degrade into noise.
+- Quantum Error Correction (QEC): Surface codes and LDPC (low-density parity check) codes require thousands of physical qubits to encode a single protected logical qubit.
+- Practical Applications: Near-term applications focus on quantum chemistry simulations, molecular docking for pharmaceutical discovery, and combinatorial portfolio optimization.

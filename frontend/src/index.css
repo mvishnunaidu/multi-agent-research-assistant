@@ -1306,3 +1306,615 @@ body {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ==========================================================================
+   Mobile & Tablet Responsive System (Scoped Exclusively to <= 1024px)
+   Laptops and Desktops (> 1024px) remain 100% UNTOUCHED and identical.
+   ========================================================================== */
+
+/* ── Default Desktop State for Mobile Controls ────────────────────────────── */
+.mobile-sidebar-backdrop {
+  display: none;
+}
+
+.mobile-sidebar-close {
+  display: none;
+}
+
+.mobile-menu-btn {
+  display: none;
+}
+
+.docs-table-wrapper {
+  width: 100%;
+}
+
+/* ==========================================================================
+   TABLET & MOBILE BREAKPOINT: <= 1024px
+   Targets: iPads, Android Tablets, Surface, Landscape Mobile
+   ========================================================================== */
+@media (max-width: 1024px) {
+  /* 1. Off-Canvas Sidebar Navigation */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    max-width: 82vw;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+    box-shadow: none;
+    background-color: rgba(6, 9, 17, 0.98);
+    backdrop-filter: blur(28px);
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 16px 0 50px rgba(0, 0, 0, 0.75);
+  }
+
+  .mobile-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 7, 15, 0.75);
+    backdrop-filter: blur(4px);
+    z-index: 999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+
+  .mobile-sidebar-backdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .mobile-sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-glass);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .mobile-sidebar-close:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-glass);
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .mobile-menu-btn:hover {
+    background: rgba(0, 242, 254, 0.08);
+    border-color: var(--border-cyan);
+    color: var(--cyan-primary);
+  }
+
+  /* 2. Top Header */
+  .top-header {
+    padding: 0 16px;
+    height: 54px;
+  }
+
+  .workspace-title {
+    font-size: 14px;
+  }
+
+  /* 3. Floating Bottom Dock */
+  .floating-input-dock {
+    left: 0;
+    right: 0;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    padding: 0 16px;
+  }
+
+  .dock-inner {
+    max-width: 100%;
+    padding: 6px 10px 6px 14px;
+  }
+
+  /* 4. Four-Agent Pipeline Grid: 2 columns on Tablet */
+  .pipeline-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .agent-col {
+    border-right: 1px solid var(--border-glass);
+    border-bottom: 1px solid var(--border-glass);
+  }
+
+  .agent-col:nth-child(2n) {
+    border-right: none;
+  }
+
+  .agent-col:nth-child(3),
+  .agent-col:nth-child(4) {
+    border-bottom: none;
+  }
+
+  /* 5. Workspace Body */
+  .workspace-body {
+    padding: 20px 20px calc(110px + env(safe-area-inset-bottom, 0px)) 20px;
+    gap: 20px;
+  }
+}
+
+/* ==========================================================================
+   MOBILE PHONES BREAKPOINT: <= 768px
+   Targets: iPhone (390x844, 430x932), Android (360x800, 375x812), Small Mobile (320x568)
+   ========================================================================== */
+@media (max-width: 768px) {
+  /* 1. Layout & Scroll Prevention */
+  body {
+    height: 100dvh;
+  }
+
+  #root {
+    height: 100dvh;
+    width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .main-content {
+    width: 100vw;
+    height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  .workspace-body {
+    padding: 14px 12px calc(125px + env(safe-area-inset-bottom, 0px)) 12px;
+    gap: 16px;
+    overflow-x: hidden;
+  }
+
+  /* 2. Top Header */
+  .top-header {
+    padding: 0 12px;
+    height: 52px;
+  }
+
+  .header-left {
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .workspace-title {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+  }
+
+  .workspace-badge {
+    display: none; /* Hide UUID on small screens to prevent title clipping */
+  }
+
+  .header-right {
+    gap: 6px;
+  }
+
+  .header-pill {
+    padding: 3px 8px;
+    font-size: 11px;
+    gap: 5px;
+  }
+
+  /* 3. Cold Start Alert Banner */
+  .cold-start-banner {
+    padding: 10px 14px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .cold-start-banner button {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* 4. Central Welcome Hero Card */
+  .welcome-hero-card {
+    padding: 24px 14px;
+    margin-top: 6px;
+    gap: 14px;
+    border-radius: 18px;
+  }
+
+  .hero-avatar-glow {
+    width: 60px;
+    height: 60px;
+    border-radius: 16px;
+  }
+
+  .welcome-hero-card h1 {
+    font-size: 21px;
+    line-height: 1.25;
+  }
+
+  .welcome-hero-card p {
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding: 0 4px;
+  }
+
+  .prompt-chips-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .chip-btn {
+    padding: 10px 14px;
+    font-size: 12px;
+    text-align: left;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* 5. Four-Agent Sequential Pipeline Trace Card: 1 Vertical Column Stack */
+  .agent-pipeline-card {
+    border-radius: 16px;
+  }
+
+  .pipeline-header {
+    padding: 12px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .pipeline-header h3 {
+    font-size: 13px;
+  }
+
+  .pipeline-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-col {
+    padding: 14px 14px;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-glass) !important;
+    gap: 8px;
+  }
+
+  .agent-col:last-child {
+    border-bottom: none !important;
+  }
+
+  .agent-name-title {
+    font-size: 13.5px;
+  }
+
+  .agent-role-desc {
+    font-size: 11px;
+  }
+
+  .agent-preview-box {
+    font-size: 11px;
+    padding: 8px 10px;
+    max-height: 95px;
+    word-break: break-word;
+  }
+
+  /* 6. Research Report Results Card */
+  .report-result-card {
+    border-radius: 16px;
+  }
+
+  .report-header-toolbar {
+    padding: 14px 14px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .report-title-area h3 {
+    font-size: 14.5px;
+  }
+
+  .report-actions {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .toolbar-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 11.5px;
+  }
+
+  .report-meta-section {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .meta-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    font-size: 11.5px;
+  }
+
+  .meta-label {
+    min-width: auto;
+    font-size: 10px;
+  }
+
+  .subtasks-pills-row,
+  .sources-pills-row {
+    gap: 6px;
+  }
+
+  .subtask-tag,
+  .source-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .report-markdown-body {
+    padding: 18px 14px;
+    font-size: 13.5px;
+    line-height: 1.7;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .report-markdown-body h1 {
+    font-size: 19px;
+    margin-bottom: 16px;
+  }
+
+  .report-markdown-body h2 {
+    font-size: 16px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+  }
+
+  .report-markdown-body h3 {
+    font-size: 14px;
+    margin-top: 16px;
+  }
+
+  .report-markdown-body ul,
+  .report-markdown-body ol {
+    padding-left: 18px;
+  }
+
+  .report-markdown-body pre {
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .report-markdown-body table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 12px;
+    margin-bottom: 16px;
+  }
+
+  .report-markdown-body th,
+  .report-markdown-body td {
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+
+  /* 7. Document Upload Panel */
+  .documents-panel {
+    gap: 16px;
+  }
+
+  .docs-panel-header h2 {
+    font-size: 17px;
+  }
+
+  .docs-panel-header p {
+    font-size: 12px;
+  }
+
+  .dropzone-box {
+    padding: 32px 14px;
+    border-radius: 16px;
+    gap: 10px;
+  }
+
+  .dropzone-icon-wrap {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+
+  .dropzone-box h3 {
+    font-size: 14.5px;
+  }
+
+  .dropzone-box p {
+    font-size: 11.5px;
+  }
+
+  .cyan-glow-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  .docs-list-card {
+    border-radius: 16px;
+  }
+
+  .docs-list-header {
+    padding: 12px 16px;
+  }
+
+  .docs-list-header h3 {
+    font-size: 13.5px;
+  }
+
+  .docs-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+
+  .docs-table {
+    min-width: 500px; /* Allow smooth horizontal swipe on phone */
+  }
+
+  .docs-table th,
+  .docs-table td {
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+
+  /* 8. Conversational Chat Mode */
+  .chat-messages-container {
+    gap: 14px;
+  }
+
+  .chat-bubble {
+    max-width: 96%;
+    gap: 8px;
+  }
+
+  .chat-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+    border-radius: 8px;
+  }
+
+  .chat-card {
+    padding: 10px 14px;
+    font-size: 13px;
+    border-radius: 14px;
+  }
+
+  /* 9. Session History View */
+  .history-item-row {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .history-item-left {
+    max-width: 80%;
+  }
+
+  .history-query-text {
+    font-size: 13px;
+  }
+
+  .history-time-meta {
+    font-size: 10px;
+  }
+
+  /* 10. Floating Bottom Input Dock */
+  .floating-input-dock {
+    left: 0;
+    right: 0;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    padding: 0 8px;
+  }
+
+  .dock-inner {
+    padding: 6px 8px;
+    gap: 6px;
+    border-radius: 16px;
+  }
+
+  .mode-toggle-btn {
+    padding: 6px 9px;
+    font-size: 11px;
+    border-radius: 10px;
+    gap: 4px;
+  }
+
+  .dock-textarea {
+    font-size: 15px; /* Comfortable mobile typing */
+    padding: 4px;
+    max-height: 90px;
+  }
+
+  .dock-hint {
+    display: none; /* Hide Enter/Shift+Enter hint on touchscreens */
+  }
+
+  .dock-send-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+
+  /* 11. Toasts */
+  .toast-stack {
+    left: 12px;
+    right: 12px;
+    bottom: calc(75px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .toast-item {
+    padding: 10px 14px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+}
+
+/* ==========================================================================
+   EXTRA-SMALL MOBILE BREAKPOINT: <= 360px
+   Targets: iPhone SE (320x568), Galaxy Fold closed, Android 320px
+   ========================================================================== */
+@media (max-width: 360px) {
+  .workspace-title {
+    max-width: 120px;
+    font-size: 12px;
+  }
+
+  .welcome-hero-card h1 {
+    font-size: 18px;
+  }
+
+  .mode-toggle-btn span {
+    display: none; /* Icon-only toggle on ultra-compact 320px screens */
+  }
+
+  .mode-toggle-btn {
+    padding: 6px 8px;
+  }
+
+  .dock-inner {
+    padding: 4px 6px;
+  }
+}

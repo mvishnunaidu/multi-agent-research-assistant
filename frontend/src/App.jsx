@@ -16,7 +16,9 @@ import {
   Cpu,
   FileText,
   FileCode,
-  FolderOpen
+  FolderOpen,
+  Menu,
+  X
 } from 'lucide-react'
 import './index.css'
 
@@ -63,6 +65,7 @@ export default function App() {
   const [apiOnline, setApiOnline] = useState(false)
   const [llmProvider, setLlmProvider] = useState('Checking...')
   const [coldStartNotice, setColdStartNotice] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   // Document management
   const [documents, setDocuments] = useState([])
@@ -397,19 +400,39 @@ export default function App() {
 
   return (
     <>
+      {/* ── Mobile Sidebar Backdrop Overlay ─────────────────────────────────── */}
+      <div
+        className={`mobile-sidebar-backdrop ${isMobileMenuOpen ? 'visible' : ''}`}
+        onClick={() => setIsMobileMenuOpen(false)}
+        aria-hidden="true"
+      />
+
       {/* ── Sidebar (Matching Screenshot 1) ────────────────────────────────── */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-brand">
           <div className="brand-icon-box">
             <Cpu size={22} />
           </div>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div className="brand-title">Research Assistant</div>
             <div className="brand-subtitle">MULTI-AGENT AI PIPELINE</div>
           </div>
+          <button
+            className="mobile-sidebar-close"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Close navigation"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <button className="new-action-btn" onClick={resetAll}>
+        <button
+          className="new-action-btn"
+          onClick={() => {
+            resetAll()
+            setIsMobileMenuOpen(false)
+          }}
+        >
           + New Research
         </button>
 
@@ -417,7 +440,10 @@ export default function App() {
           <div className="nav-section-title">NAVIGATION</div>
           <button
             className={`nav-item ${navTab === 'research' || navTab === 'chat' ? 'active' : ''}`}
-            onClick={() => setNavTab(mode === 'research' ? 'research' : 'chat')}
+            onClick={() => {
+              setNavTab(mode === 'research' ? 'research' : 'chat')
+              setIsMobileMenuOpen(false)
+            }}
           >
             {mode === 'research' ? <FlaskConical size={16} /> : <MessageSquare size={16} />}
             <span>{mode === 'research' ? 'Research' : 'Chat'}</span>
@@ -425,7 +451,10 @@ export default function App() {
 
           <button
             className={`nav-item ${navTab === 'documents' ? 'active' : ''}`}
-            onClick={() => setNavTab('documents')}
+            onClick={() => {
+              setNavTab('documents')
+              setIsMobileMenuOpen(false)
+            }}
           >
             <Upload size={16} />
             <span>Documents</span>
@@ -434,7 +463,10 @@ export default function App() {
 
           <button
             className={`nav-item ${navTab === 'history' ? 'active' : ''}`}
-            onClick={() => setNavTab('history')}
+            onClick={() => {
+              setNavTab('history')
+              setIsMobileMenuOpen(false)
+            }}
           >
             <Clock size={16} />
             <span>History</span>
@@ -484,6 +516,13 @@ export default function App() {
         {/* Top Header */}
         <header className="top-header">
           <div className="header-left">
+            <button
+              className="mobile-menu-btn"
+              onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="Open navigation menu"
+            >
+              <Menu size={18} />
+            </button>
             <span className={`status-indicator ${apiOnline ? '' : 'offline'}`} />
             <div className="workspace-title">
               {navTab === 'research' && '🔬 Research Mode'}
@@ -795,37 +834,39 @@ export default function App() {
                     No documents ingested for this session yet. Upload files above to build your FAISS knowledge base.
                   </div>
                 ) : (
-                  <table className="docs-table">
-                    <thead>
-                      <tr>
-                        <th>Document Name</th>
-                        <th>Chunks in FAISS</th>
-                        <th>File Size</th>
-                        <th>Ingested At</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {documents.map((doc, idx) => (
-                        <tr key={idx}>
-                          <td className="doc-name-cell">
-                            <FileText size={16} color="var(--cyan-primary)" />
-                            {doc.filename}
-                          </td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{doc.num_chunks} chunks</td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{formatBytes(doc.file_size_bytes)}</td>
-                          <td style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-                            {doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleTimeString() : 'Recent'}
-                          </td>
-                          <td>
-                            <span className="agent-status-badge completed">
-                              <CheckCircle2 size={11} /> Ready
-                            </span>
-                          </td>
+                  <div className="docs-table-wrapper">
+                    <table className="docs-table">
+                      <thead>
+                        <tr>
+                          <th>Document Name</th>
+                          <th>Chunks in FAISS</th>
+                          <th>File Size</th>
+                          <th>Ingested At</th>
+                          <th>Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {documents.map((doc, idx) => (
+                          <tr key={idx}>
+                            <td className="doc-name-cell">
+                              <FileText size={16} color="var(--cyan-primary)" />
+                              <span>{doc.filename}</span>
+                            </td>
+                            <td style={{ fontFamily: 'var(--font-mono)' }}>{doc.num_chunks} chunks</td>
+                            <td style={{ fontFamily: 'var(--font-mono)' }}>{formatBytes(doc.file_size_bytes)}</td>
+                            <td style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                              {doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleTimeString() : 'Recent'}
+                            </td>
+                            <td>
+                              <span className="agent-status-badge completed">
+                                <CheckCircle2 size={11} /> Ready
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </div>

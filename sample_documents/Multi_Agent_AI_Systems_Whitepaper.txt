@@ -1,0 +1,36 @@
+# Multi-Agent AI Systems: Architecture, Orchestration, and Production Patterns
+Author: Dr. Elena Rostova, Senior Distributed Systems & AI Architect
+Date: January 2026
+
+## 1. Introduction & Problem Statement
+Modern generative AI applications frequently attempt to solve complex analytical workflows using single-turn, monolithic prompts. When an LLM is presented with a large context window (e.g., 50–100 pages of technical documentation) and asked to extract findings, synthesize conclusions, and format a publication-grade report, it suffers from several well-documented failure modes:
+1. "Lost in the Middle" attention degradation, where critical nuances in the middle of long contexts are overlooked.
+2. Context dilution and hallucinated citations.
+3. Lack of modularity: if synthesis fails, the entire inference cost and execution trace are wasted.
+
+Multi-agent decomposition addresses these weaknesses by partitioning cognitive responsibilities among specialized autonomous units that execute sequentially or in directed graphs.
+
+## 2. Four-Stage Deterministic Sequential Orchestration
+Rather than relying on unconstrained cyclical graphs or autonomous conversation loops—which risk infinite token loops and non-deterministic outcomes—enterprise analytical workflows favor deterministic sequential pipelines:
+1. Stage 1: Strategic Planning & Query Decomposition. A specialized Planner agent decomposes the high-level objective into 2 to 4 atomic sub-tasks using strict Pydantic schemas. Each sub-task represents an independent angle of investigation.
+2. Stage 2: Evidence Retrieval & Foundational Research. A Researcher agent performs vector similarity retrieval (top-k nearest neighbors) over indexed document embeddings. When documents are available, findings are strictly grounded in document excerpts with chunk metadata.
+3. Stage 3: Factual Synthesis & Condensation. A Summarizer agent reconciles findings across all sub-tasks, eliminating redundancy while preserving technical metrics, numerical benchmarks, and proper nouns.
+4. Stage 4: Formal Report Assembly. A Report Generator formats the synthesis into a standardized 5-section Markdown report: Title, Executive Summary, Detailed Findings, Key Takeaways, and Sources.
+
+## 3. High-Efficiency Retrieval-Augmented Generation (RAG)
+For production deployments operating under constrained memory budgets (e.g., 512MB RAM cloud tiers):
+- Chunker: RecursiveCharacterTextSplitter with chunk size = 800 characters and overlap = 150 characters.
+- Embeddings: High-dimensional API-based embeddings (e.g., Google Gemini models/gemini-embedding-001 producing 3072-dimensional dense vectors) avoid loading heavy PyTorch models into local memory.
+- Vector Store: Session-isolated FAISS (Facebook AI Similarity Search) index operating on CPU with cosine / inner product similarity.
+- Deduping: SHA-256 or metadata-driven session manifests prevent duplicate document ingestion.
+
+## 4. Multi-Provider Failover Architecture
+To ensure high availability in production, the orchestrator should implement a multi-provider fallback chain:
+- Primary Provider: Google Gemini 2.5 Flash for high-throughput reasoning.
+- Secondary / Failover Provider: Groq Cloud LPU acceleration (running open models like Qwen 27B or LLaMA 3.3) for sub-second failover when rate limits (HTTP 429) occur.
+- Tertiary Fallbacks: OpenAI and DeepSeek APIs.
+
+## 5. Summary & Key Takeaways
+1. Multi-agent decomposition dramatically improves analytical accuracy over monolithic single-turn prompts.
+2. Deterministic sequential pipelines provide predictable latency, reliable audits, and debuggable telemetry.
+3. Offloading vector embeddings to cloud APIs allows full production RAG deployments to run smoothly within 200MB of RAM.
