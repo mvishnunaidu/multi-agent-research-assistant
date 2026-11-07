@@ -65,10 +65,12 @@ def get_llm() -> BaseChatModel:
             provider_instances["gemini"] = ChatGoogleGenerativeAI(
                 model=settings.gemini_model,
                 google_api_key=settings.gemini_api_key,
+                api_version="v1beta",
+                convert_system_message_to_human=True,
                 temperature=0.3,
-                max_retries=2,
+                max_retries=1,
             )
-            logger.info("Initialized Gemini LLM (%s)", settings.gemini_model)
+            logger.info("Initialized Gemini LLM (%s with v1beta)", settings.gemini_model)
         except Exception as e:
             logger.warning("Could not initialize Gemini LLM: %s", e)
 
@@ -136,6 +138,6 @@ def get_llm() -> BaseChatModel:
     primary_model = ordered_models[0]
     if len(ordered_models) > 1:
         logger.info("Chaining primary LLM with %d fallback model(s)", len(ordered_models) - 1)
-        return primary_model.with_fallbacks(ordered_models[1:])
+        return primary_model.with_fallbacks(ordered_models[1:], exceptions_to_handle=(Exception,))
 
     return primary_model
