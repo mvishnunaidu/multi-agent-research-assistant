@@ -183,7 +183,16 @@ export default function App() {
 
   // ── File Upload Handler ─────────────────────────────────────────────────────
   const handleFileUpload = async (files) => {
-    if (!files || files.length === 0 || !sessionId) return
+    if (!files || files.length === 0) return
+
+    let currentSessionId = sessionId
+    if (!currentSessionId) {
+      currentSessionId = await initSession()
+      if (!currentSessionId) {
+        addToast('Server is connecting... Please retry upload in a few seconds.', 'error')
+        return
+      }
+    }
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
@@ -209,12 +218,12 @@ export default function App() {
       formData.append('file', file)
 
       try {
-        const res = await safeFetchJson(`${API_BASE}/upload?session_id=${sessionId}`, {
+        const res = await safeFetchJson(`${API_BASE}/upload?session_id=${currentSessionId}`, {
           method: 'POST',
           body: formData,
         })
         addToast(res.message, res.is_duplicate ? 'info' : 'success')
-        await loadDocuments(sessionId)
+        await loadDocuments(currentSessionId)
       } catch (err) {
         addToast(`Upload failed for "${file.name}": ${err.message}`, 'error')
       } finally {
@@ -226,7 +235,17 @@ export default function App() {
   // ── Dispatch Action (Research vs Chat) ──────────────────────────────────────
   const handleSend = async (overrideText) => {
     const text = (overrideText || inputQuery).trim()
-    if (!text || !sessionId || isLoading) return
+    if (!text || isLoading) return
+
+    let currentSessionId = sessionId
+    if (!currentSessionId) {
+      addToast('Connecting session to server...', 'info')
+      currentSessionId = await initSession()
+      if (!currentSessionId) {
+        addToast('Server is offline or warming up. Please click "Retry" in the status bar.', 'error')
+        return
+      }
+    }
 
     setInputQuery('')
     setIsLoading(true)
@@ -254,7 +273,7 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            session_id: sessionId,
+            session_id: currentSessionId,
             query: text,
             has_documents: documents.length > 0,
           }),
@@ -270,7 +289,7 @@ export default function App() {
           overall_status: response.overall_status || 'completed',
           timestamp: response.timestamp,
         })
-        await loadHistory(sessionId)
+        await loadHistory(currentSessionId)
         addToast('Multi-agent research report generated.', 'success')
       } catch (err) {
         setActiveResearch(prev => ({
@@ -300,7 +319,7 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            session_id: sessionId,
+            session_id: currentSessionId,
             message: text,
             has_documents: documents.length > 0,
           }),
