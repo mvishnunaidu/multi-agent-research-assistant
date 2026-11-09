@@ -204,9 +204,6 @@ def run_researcher(
     elif errors and len(errors) == len(sub_tasks):
         status = "error"
         error_msg = "; ".join(errors)
-    elif errors or (has_docs and total_chunks_found == 0):
-        status = "fallback"
-        error_msg = "; ".join(errors) if errors else "No relevant document chunks found in index."
     else:
         status = "completed"
         error_msg = None

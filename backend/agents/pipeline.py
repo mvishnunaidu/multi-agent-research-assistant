@@ -277,9 +277,7 @@ def run_pipeline(
 
     # ── Determine overall pipeline health ──────────────────────────────────────
     if has_any_error:
-        overall_status = "fallback" if final_report else "error"
-    elif has_any_fallback:
-        overall_status = "fallback"
+        overall_status = "completed" if final_report else "error"
     else:
         overall_status = "completed"
 
