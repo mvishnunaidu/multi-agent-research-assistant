@@ -411,20 +411,26 @@ body {
 .workspace-body {
   flex: 1 1 0%;
   min-height: 0;
-  height: 100%;
-  overflow-y: scroll;
+  overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
-  scrollbar-gutter: stable;
-  padding: 28px 36px 200px 36px;
+  scroll-behavior: smooth;
+  padding: 28px 36px 260px 36px;
   display: flex;
   flex-direction: column;
   gap: 28px;
-  max-width: 1240px;
-  margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+}
+
+.agent-pipeline-card,
+.report-result-card,
+.documents-panel,
+.history-list-card {
+  max-width: 1240px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* ── Central Hero Card (Matching Screenshot 1) ─────────────────────────────── */
@@ -585,10 +591,10 @@ body {
 }
 
 .agent-col {
-  padding: 20px;
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   border-right: 1px solid var(--border-glass);
   background: rgba(0, 0, 0, 0.15);
   transition: background 0.2s ease;

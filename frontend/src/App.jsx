@@ -74,6 +74,8 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef(null)
+  const workspaceRef = useRef(null)
+  const reportRef = useRef(null)
 
   // Input & Execution
   const [inputQuery, setInputQuery] = useState('')
@@ -296,6 +298,10 @@ export default function App() {
         })
         await loadHistory(currentSessionId)
         addToast('Multi-agent research report generated.', 'success')
+
+        setTimeout(() => {
+          reportRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 120)
       } catch (err) {
         setActiveResearch(prev => ({
           ...(prev || {}),
@@ -435,13 +441,6 @@ export default function App() {
     'What are the key findings?',
     'Compare and contrast the main topics',
   ]
-
-  const agentDescriptions = {
-    Planner: 'Decomposes query into 2 to 4 atomic sub-tasks with Pydantic structured output.',
-    Researcher: 'Top-5 FAISS similarity retrieval per sub-task or foundational knowledge reasoning.',
-    Summarizer: 'Synthesizes findings, preserving exact numbers, metrics, and citations.',
-    'Report Generator': 'Assembles formal 5-section Markdown report with source attribution.',
-  }
 
   return (
     <>
@@ -627,7 +626,7 @@ export default function App() {
         )}
 
         {/* ── Scrollable Workspace Body ────────────────────────────────────── */}
-        <div className="workspace-body">
+        <div className="workspace-body" ref={workspaceRef}>
           {/* TAB 1: RESEARCH MODE */}
           {navTab === 'research' && (
             <>
@@ -692,10 +691,6 @@ export default function App() {
                             {agentName}
                           </div>
 
-                          <div className="agent-role-desc">
-                            {agentDescriptions[agentName]}
-                          </div>
-
                           <span className={`agent-status-badge ${stepData.status}`}>
                             {stepData.status === 'completed' && <CheckCircle2 size={11} />}
                             {stepData.status === 'fallback' && <AlertTriangle size={11} />}
@@ -703,10 +698,6 @@ export default function App() {
                             {stepData.status === 'running' && <div className="spinner-sm" style={{ width: 10, height: 10 }} />}
                             {stepData.status}
                           </span>
-
-                          <div className="agent-preview-box">
-                            {stepData.output_preview || 'Telemetry preview appears upon step completion.'}
-                          </div>
 
                           {stepData.error && (
                             <div className="agent-warning-box">
@@ -722,7 +713,7 @@ export default function App() {
 
               {/* Report Viewer */}
               {activeResearch?.final_report && (
-                <div className="report-result-card">
+                <div className="report-result-card" ref={reportRef}>
                   <div className="report-header-toolbar">
                     <div className="report-title-area">
                       <h3>Synthesized Research Report</h3>
@@ -1035,7 +1026,14 @@ export default function App() {
 
         {/* ── Floating Input Dock (Matching Screenshot 1 & ChatGPT Style) ─────── */}
         <div className="floating-input-dock">
-          <div className="dock-outer-wrapper">
+          <div
+            className="dock-outer-wrapper"
+            onWheel={(e) => {
+              if (workspaceRef.current && e.target.tagName !== 'TEXTAREA') {
+                workspaceRef.current.scrollTop += e.deltaY
+              }
+            }}
+          >
             {/* ChatGPT-style attached document chips tray */}
             {documents.length > 0 && (
               <div className="dock-attached-tray">
