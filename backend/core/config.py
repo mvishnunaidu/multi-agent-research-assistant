@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     llm_provider: str = Field(default="gemini")
 
     # Model names (override in .env if a provider deprecates/renames a model)
-    gemini_model: str = Field(default="gemini-2.5-flash")
+    gemini_model: str = Field(default="gemini-1.5-flash")
     gemini_embedding_model: str = Field(
         default="models/gemini-embedding-001"
     )

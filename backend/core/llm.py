@@ -62,15 +62,18 @@ def get_llm() -> BaseChatModel:
     if settings.gemini_api_key.strip():
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
+            model_name = settings.gemini_model.strip()
+            if "2.5" in model_name:
+                model_name = "gemini-1.5-flash"
             provider_instances["gemini"] = ChatGoogleGenerativeAI(
-                model=settings.gemini_model,
+                model=model_name,
                 google_api_key=settings.gemini_api_key,
                 api_version="v1beta",
                 convert_system_message_to_human=True,
                 temperature=0.3,
                 max_retries=1,
             )
-            logger.info("Initialized Gemini LLM (%s with v1beta)", settings.gemini_model)
+            logger.info("Initialized Gemini LLM (%s with v1beta)", model_name)
         except Exception as e:
             logger.warning("Could not initialize Gemini LLM: %s", e)
 

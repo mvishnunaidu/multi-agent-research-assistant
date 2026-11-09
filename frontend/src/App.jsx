@@ -691,19 +691,13 @@ export default function App() {
                             {agentName}
                           </div>
 
-                          <span className={`agent-status-badge ${stepData.status}`}>
+                          <span className={`agent-status-badge ${stepData.status}`} title={stepData.error || stepData.status}>
                             {stepData.status === 'completed' && <CheckCircle2 size={11} />}
                             {stepData.status === 'fallback' && <AlertTriangle size={11} />}
                             {stepData.status === 'error' && <AlertCircle size={11} />}
                             {stepData.status === 'running' && <div className="spinner-sm" style={{ width: 10, height: 10 }} />}
                             {stepData.status}
                           </span>
-
-                          {stepData.error && (
-                            <div className="agent-warning-box">
-                              {stepData.error}
-                            </div>
-                          )}
                         </div>
                       )
                     })}
